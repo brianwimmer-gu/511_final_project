@@ -1,0 +1,152 @@
+---
+title: "Q4_REGRESSION"
+author: "Brendan Baker"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Regression: What variables contribute most to predicting the popularity of a song? 
+
+After completing our exploratory data analysis (EDA) for the playlist, the next step was to fit a regression model.  For our regression model, we hope to investigate the following data science question:
+  
+**Data science question:** What variables contribute most to predicting a songs popularity? 
+  
+By using a regression model, we can determine which (if any) variables contribute to predicting a song's popularity.  This could be informative from a psychological perspective in that we can determine what features of a song contribute to it's broad appeal.  It could also inform musicians who hope to make popular music on what styles they should include to provide them with their best chance at reaching a broad audience.  The first step in our analysis was to fit a full regression model with all variables.  For our model, we will only include the continuous song variables - As the distribution of decades is highly skewed, it was removed from analysis.  We will first only examine the full model with all variables and their interactions.  A train-test split of 80-20 was used. 
+
+```{r message=FALSE, warning=FALSE}
+# Load packages
+library(tidyverse)
+library(caret)
+# Read in the data
+songs <- read_csv('edyPlaylist.csv')
+
+# Select only the features which we wish to include
+song_vars <- songs %>% 
+  select(-c(...1, track.name, track.album.release_date, track.album.album_type, Playlist))
+
+# Train test split
+set.seed(0716)
+# Do train test split (point i)
+training.samples <- song_vars$track.popularity %>%
+  createDataPartition(p = 0.8) # Do split
+train.data  <- song_vars[training.samples$Resample1, ] # Train data
+test.data <- song_vars[-training.samples$Resample1, ] # Test data
+print(paste0("Training observations: ", dim(train.data)[1], " Test observations: ", dim(test.data)[1])) # Check dimensions
+```
+
+## Model building
+### Model 1: Full regression without interactions
+Before examining the full model, the data must be examined for the issue of multicollinearity. 
+```{r}
+fit1 <- lm(track.popularity~(danceability + energy + loudness + 
+                 speechiness + acousticness + instrumentalness +
+                 liveness + tempo + track.duration_ms + valence
+                 ), data=train.data)
+summary(fit1)
+```
+
+```{r}
+car::vif(fit1)
+```
+
+In our initial regression model, the energy variable had a variance inflation factor (VIF) of 6.36, which is considered above the cutoff for multicollinearity.  As a result, we will dropped the energy variable from our regression. 
+
+### Model 2: No interactions, multicollinearity adjustment
+```{r}
+fit2 <- lm(track.popularity~(danceability + loudness + 
+                 speechiness + acousticness + instrumentalness +
+                 liveness + tempo + track.duration_ms + valence
+                 ), data=train.data)
+summary(fit2)
+```
+
+In our adjusted model, we found that the variables loudness, acousticness, and tempo were the significant predictors of popularity.  The next step was to check run an interaction model.  An interaction model includes the effects of variables on each other and their combined effect on the response variable.
+
+### Model 3: Model with interactions
+```{r}
+fit3 <- lm(track.popularity~(danceability + loudness + 
+                 speechiness + acousticness + instrumentalness +
+                 liveness + tempo + track.duration_ms + valence
+                 )^2, data=train.data)
+summary(fit3)
+```
+In our interaction model, the only significant single variable at the 95% confidence level was track duration.  There were a few significant interaction terms, such as the interaction track duration:danceability, loudness:acousticness, acousticness:liveness, and instrumentalness:valence.  For the final model, all terms that were not present in an interaction and the interaction terms that were not significant were dropped from the model.  Due to the hierarchical principle in regression, any variables that are significant in an interaction must also be kept as a single variable term.
+
+### Model 4: Model with interactions, trimmed.
+
+```{r}
+fit4 <- lm(track.popularity~(track.duration_ms + danceability + loudness + acousticness + valence + instrumentalness +
+                               track.duration_ms*danceability + loudness*acousticness + acousticness*liveness + instrumentalness*valence
+                 ), data=train.data)
+summary(fit4)
+```
+After dropping the non-significant variables from the interaction model, only valence and the interactions duration:danceability and valence:instrumentalness were still significant.
+
+
+## Model assessment
+After model creation, the next step was to assess our model performance on the parameters of $R^2$, $RSE$, and $F$. 
+```{r}
+# Code adapted from Dr. Purna Gamage, Georgetown University
+# Make predictions
+predictions1 <- fit1 %>% predict(test.data)
+p1=data.frame(
+  RMSE = RMSE(predictions1, test.data$track.popularity),
+  R2 = R2(predictions1, test.data$track.popularity)
+)
+
+# Make predictions
+predictions2 <- fit2 %>% predict(test.data)
+p2=data.frame(
+  RMSE = RMSE(predictions2, test.data$track.popularity),
+  R2 = R2(predictions2, test.data$track.popularity)
+)
+
+# Make predictions
+predictions3 <- fit3 %>% predict(test.data)
+p3=data.frame(
+  RMSE = RMSE(predictions3, test.data$track.popularity),
+  R2 = R2(predictions3, test.data$track.popularity)
+)
+
+predictions4 <- fit4 %>% predict(test.data)
+p4=data.frame(
+  RMSE = RMSE(predictions4, test.data$track.popularity),
+  R2 = R2(predictions4, test.data$track.popularity)
+)
+
+# Join the rows 
+all =rbind(p1,p2,p3,p4)
+
+# Get all F-statistics
+all=cbind(all, c(summary(fit1)$fstatistic[1],summary(fit2)$fstatistic[1],summary(fit3)$fstatistic[1],summary(fit4)$fstatistic[1]))
+
+# Get all r-sqared statistics
+all=cbind(all,c(summary(fit1)$adj.r.squared,summary(fit2)$adj.r.squared,summary(fit3)$adj.r.squared,summary(fit4)$adj.r.squared))
+
+# Get all sigma values
+all=cbind(all,c(summary(fit1)$sigma,summary(fit2)$sigma,summary(fit3)$sigma,summary(fit4)$sigma))
+
+all = cbind(all, c('fit1','fit2','fit3','fit4'))
+colnames(all)[c(3,4,5,6)]<-c("F stat","Adj R^2", "RSE","models")
+all[,c(3,4,5,6)]
+```
+
+Given the performance measures, it is difficult to determine which model is the best.  The F statistic, which tells us how significant our model is, is strongest for the second model, which is the one without interactions.  However, the second model also has the lowest $R^2$ value, which quantifies how well the response variable is predicted.  The $RSE$ or Residual Standard Error is lowest on model 3, which also has the lowest F statistic.  The $RSE$ is a measure of the residuals, or the distance from the predicted value.  A lower $RSE$ indicates a closer fit.  To complete the rest of the analysis, and to determine whether a linear model is suitable for this data at all, we will use model 4, which has a balance of all performance measures.  Model 4 was our trimmed model that still included interactions.
+
+## Suitability for linear regression
+```{r}
+par(mfrow=c(2,2))
+plot(fit4)
+```
+  
+We used residual plots to determine whether this data science question was suitable for a linear model.  The relationship between the fitted values and the residuals does show a V-pattern and does not look randomly distributed.  The Q-Q plot of the residuals also suggests that the residuals are not very normally distributed.  However, there are no high leverage points (defined in this case as being around or outside of Cook's distance), indicating that it is not the case that just a few outliers are heavily impacting the data.  These observations, combined with the relatively low $R^2$ value, would suggest that this question is not very well suited for a linear regression.
+
+
+## Conclusion 
+Unfortunately, our data were not very well suited for a linear regression, nor was our model particularly interpretable.  In our final chosen model, the main significant predictors were valence, the interaction between loudness and acousticness, and the interaction between valence and instrumentalness.  Based on the coefficients and p-values, one might suggest that happier songs, with a combined effect of increased loudness and acousticness, and a decreased combined effect of valence and instrumentalness contribute to a song's popularity.  After all, happy, loud and acoustic driven songs are descriptive of pop music.  However, given the weak fit and predictive value overall, we are hesitant to conclude that this is the case.  An abbreviated regression equation is depicted below:
+  
+  
+$Popularity = 7.09X_{valence} + 1.71X_{loudness}X_{acousticness} - 3.52X_{valence}X_{instrumentalness} + 50.98$
+  
+  
+Overall, this question is not well-suited to regression and further analysis is needed to determine more conclusively what variables contribute in predicting a song's popularity. 

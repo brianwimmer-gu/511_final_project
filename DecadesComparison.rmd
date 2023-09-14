@@ -1,0 +1,274 @@
+---
+title: "511 Final Project - Trends Over Decades"
+author: "Brendan Baker"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# The plan: 
+
+1. Compare 1950s to 2010s since these are the earliest and latest decades to have fully developed playlists
+- Examine the distributions, visualizations
+- Use this as a bit of a feature selection 
+- See about doing a maximum likelihood estimate - dance-ability looks good for normal estimate, track duration, loudness
+- Do bootstrapping to determine mean differences, confidence intervals, etc. 
+- Joint distributions/marginal?
+- Do the ANOVA/T-test procedure
+- Consider using non-parametric test or power
+
+
+
+# Data Cleaning
+```{r}
+# Read in the data
+library(tidyverse)
+library(viridis)
+decades <- read_csv("spotify_decades.csv")
+
+# Release Day may be too granular - separate specific year instead
+decades$release_year <- str_split(decades$track.album.release_date, "-", simplify = T)[,1]
+
+# Select the variables of initial interest
+
+# Check for missing data
+sum(apply(is.na(decades), 1, sum))
+```
+
+# Initial EDA
+```{r}
+# Separate the data into 1950s and 2010s
+song50s <- decades[decades$tag=="1950",]
+song20s <- decades[decades$tag=="2020",]
+songcomparison <- bind_rows(song20s, song50s)
+
+# Pivot the data to compare all at once
+# Using only 1950 and 2010
+songs_long <- songcomparison %>% pivot_longer(cols = colnames(songcomparison)[5:14], names_to = "Measure", 
+                                values_to = "Score") %>% mutate(decade = as.factor(tag))
+
+# Using every year
+songs_long2 <- decades %>% pivot_longer(cols = colnames(songcomparison)[5:14], names_to = "Measure", 
+                                values_to = "Score") %>% mutate(decade = as.factor(tag))
+
+# Visualize the distributions of the variables for the decades
+ggplot(songs_long, aes(x = Score)) + facet_wrap(~Measure, scales = "free", nrow = 5) +
+  geom_histogram(aes(fill = decade), bins = 40, color = "black")
+
+# Remove instrumentalness - essentially no variation between the two
+var(song50s$instrumentalness)
+var(song10s$instrumentalness)
+songs_long <- songs_long[songs_long$Measure!="instrumentalness",]
+songs_long2 <- songs_long2[songs_long2$Measure!="instrumentalness",]
+
+# Graph between first and last
+ggplot(songs_long, aes(x = Score)) + facet_wrap(~Measure, scales = "free", nrow = 3) +
+  geom_histogram(aes(fill = decade), alpha = .9, bins = 40, color = "black") + 
+  labs(title = "Distribution of Song Variables,\nPopular songs in 1950 and 2020") + 
+  theme(text = element_text(size = 14))
+```
+**Comment:** Based on this initial visualization, danceability, loudness, and track duration will be used for comparison as they show distinct differences at first glance. 
+
+```{r}
+# Graph all decades
+ggplot(songs_long2, aes(x = Score)) + facet_wrap(~Measure, scales = "free", nrow = 3) +
+  geom_histogram(aes(fill = decade), alpha = .9, bins = 40, color = "black") + 
+  labs(title = "Distribution of Song Variables,\nPopular songs of Decade 1950-2010") + 
+  theme(text = element_text(size = 14))
+```
+
+
+
+```{r}
+# Graph overall trends
+mean_data <- songs_long2 %>% group_by(decade, Measure) %>%
+  summarise(across(.cols = Score, .fns = mean))
+
+head(mean_data)
+
+# Graph trend
+mean_data %>% ggplot(aes(x = decade, y = Score)) + facet_wrap(~Measure, scales = "free", nrow = 3) +
+  geom_line(aes(group = 1, color = Measure)) + geom_point(alpha = .9, color = "black") + 
+  labs(title = "Mean of Song Variables by Decade,\n1950-2020") + 
+  theme(text = element_text(size = 12), axis.text.x = element_text( 
+                           size=10, angle=45))
+```
+**Comment:** While there are clear differences in these variables over the decades, it is interesting to note that very few of the trends are linear.  The mean tempo has raised and lowered over the decades, track duration has increased then decreased again (perhaps song length was limited by technology in 1950 and by attention span in 2020), danceability has generally increased with a slight downturn in 1980, and loudness peaked in 2000 before beginning to decrease slightly. 
+
+
+# Distribution of Three Variables Between 1950 and 2010
+
+## Loudness
+```{r}
+# Subset the measures of interest
+interest_measures <- decades %>% rename(decade = tag) %>% 
+  mutate(decade = as.factor(decade)) %>%
+  select(track.id, decade, danceability, loudness, track.duration_ms, acousticness, valence)
+
+# Create a boxplot of the loudness variable
+interest_measures %>% ggplot(aes(decade, loudness)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red",
+               outlier.shape = 2) + labs(title = "Boxplot of Loudness for Popular Songs of Each Decade\n1950-2020",
+                                         x = "Decade", y = "Loudness Score") + scale_fill_viridis(discrete = T, option = "magma") + 
+  theme(text = element_text(size = 14))
+
+```
+**Comment:** Note that there is a general upward trend in loudness over the decades until about 2000, then a small decrease.  However, it is interesting to note that the inter-quartile range of loudness scores generally decreases over time.
+
+## ANOVA
+```{r}
+# Anova for loudness
+summary(aov(loudness ~ decade, data = interest_measures))
+```
+
+## Pairwise t-tests
+### Loudness
+https://www.datanovia.com/en/lessons/pairwise-t-test/
+http://www.sthda.com/english/articles/24-ggpubr-publication-ready-plots/76-add-p-values-and-significance-levels-to-ggplots/
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6099145/ (multiple tests)
+
+```{r}
+library(ggpubr)
+library(rstatix)
+library(viridis)
+# Pairwise t-tests for loudness - Bonferroni correction
+loud.test <- pairwise_t_test(interest_measures, loudness ~ decade, paired = F,
+                p.adjust.method = "hochberg")
+
+# Pairwise t-test matrix
+loud.test2 <- pairwise.t.test(interest_measures$loudness, interest_measures$decade,
+                             p.adjust.method = "hochberg")
+
+# Check the p-values
+loud.test2
+
+# Boxplot with t-test results
+loud.test <- loud.test %>% add_xy_position(x = "decade")
+
+interest_measures %>% ggplot(aes(decade, loudness)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red",
+               outlier.shape = 2) + labs(title = "Boxplot of Loudness for Popular Songs of Each Decade\n1950-2020",
+                                         x = "Decade", y = "Loudness Score") + 
+  scale_fill_viridis(discrete = T, option = "magma") +
+  stat_pvalue_manual(loud.test, step.increase = .05) + theme(text = element_text(size = 14))
+
+```
+**Comments:** Key: NS = Not significant, * = (p < .05), ** = (p < .01), *** = (p < .001), **** = (p < .00001). Note: scale has been increased to demostrate significance.  In the 1950-1970 range, and in the 2000-2020 range, we see that the differences in loudness score are either less signficant or non significant.
+
+
+## Danceability
+# Check to make sure these are consistent
+### ANOVA
+```{r}
+# ANOVA
+summary(aov(danceability ~ decade, data = interest_measures))
+```
+
+
+
+```{r}
+# Create a boxplot of the loudness variable
+interest_measures %>% ggplot(aes(decade, valence)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red",
+               outlier.shape = 2) + labs(title = "Boxplot of Valence for Popular Songs of Each Decade\n1950-2020",
+                                         x = "Decade", y = "Valence Score") + scale_fill_viridis(discrete = T, option = "viridis") + 
+  theme(text = element_text(size = 14))
+```
+
+```{r}
+# Pairwise t-tests for danceability - Hochberg correction
+dance.test <- pairwise_t_test(interest_measures, valence ~ decade, paired = F,
+                p.adjust.method = "hochberg")
+
+# Pairwise t-test matrix
+dance.test2 <- pairwise.t.test(interest_measures$valence, interest_measures$decade,
+                             p.adjust.method = "hochberg")
+
+# Check the p-values
+dance.test2
+
+# Boxplot with t-test results
+dance.test <- dance.test %>% add_xy_position(x = "decade")
+
+interest_measures %>% ggplot(aes(decade, valence)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red",
+               outlier.shape = 2) + labs(title = "Boxplot of Danceability for Popular Songs of Each Decade\n1950-2020",
+                                         x = "Decade", y = "Danceability Score") + 
+  scale_fill_viridis(discrete = T, option = "viridis") +
+  stat_pvalue_manual(dance.test, step.increase = .01) + theme(text = element_text(size = 14))
+
+# Heatmap with t-test results
+dance.data <- reshape2::melt(dance.test2$p.value) %>% mutate(value = round(value, 3))
+#dance.data[dance.data$Var1==dance.data$Var2,]$value <- 1
+dance.data <- na.omit(dance.data)
+dance.data2 <- data.frame(Var1 = dance.data$Var2, Var2 = dance.data$Var1, value = dance.data$value)
+dance.matrix <- bind_rows(dance.data, dance.data2)
+
+dance.matrix %>% ggplot(aes(Var1, Var2, fill = value)) + geom_tile() +
+  geom_text(aes(label = value)) + scale_fill_viridis(option = "H", discrete = F, direction = -1) +
+  scale_x_continuous(breaks = seq(1950, 2020, 10)) + 
+  scale_y_continuous(breaks = seq(1950, 2020, 10)) + labs(title = "Matrix of P-values for Pairwise t-tests for Danceability Scores",
+                                                          x = "Decade", y = "Decade")
+
+```
+
+### Acousticness
+```{r}
+# Create a boxplot of the loudness variable
+interest_measures %>% ggplot(aes(decade, acousticness)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red",
+               outlier.shape = 2) + labs(title = "Boxplot of Acousticness for Popular Songs of Each Decade\n1950-2020",
+                                         x = "Decade", y = "Acousticness Score") + scale_fill_viridis(discrete = T, option = "viridis") + 
+  theme(text = element_text(size = 14))
+```
+
+## Acousticness
+```{r}
+# Kruskal wallace test
+kruskal.test(interest_measures$acousticness, interest_measures$decade)
+```
+See the distributions of the acousticness in more detail
+
+```{r}
+interest_measures %>% ggplot(aes(x = acousticness)) + facet_wrap(~decade) + geom_histogram()
+```
+
+
+```{r}
+acoustic.test <- pairwise_wilcox_test(interest_measures, acousticness ~ decade, p.adjust.method = "hochberg")
+
+acoustic.test <- acoustic.test %>% add_xy_position(x = "decade")
+
+interest_measures %>% ggplot(aes(decade, acousticness)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red",
+               outlier.shape = 2) + labs(title = "Boxplot of Loudness for Popular Songs of Each Decade\n1950-2020",
+                                         x = "Decade", y = "Acousticness Score") + 
+  scale_fill_viridis(discrete = T, option = "magma") +
+  stat_pvalue_manual(acoustic.test, step.increase = .05) + theme(text = element_text(size = 14))
+```
+
+
+# Distributions - Long - comparison?
+
+
+
+
+
+# Hypothesis testing multiple - MANOVA (are these variables independent of the year)
+```{r warning=FALSE}
+# Format
+wide <- mean_data %>% group_by(decade) %>%pivot_wider(id_cols = decade, names_from = Measure, values_from = Score) %>%
+  select(decade, acousticness, danceability, energy, loudness, speechiness, tempo, track.duration_ms, valence)
+
+# DVs
+dependent_vars <- cbind(wide$acousticness, wide$loudness, wide$danceability)
+independent_vars <- 1:length(wide$decade)
+
+# Bind to create the full dataset
+data <- cbind.data.frame(dependent_vars, independent_vars)
+
+# MANOVA Model
+model <- manova(dependent_vars ~ independent_vars, data = data)
+summary(model)
+
+```
+

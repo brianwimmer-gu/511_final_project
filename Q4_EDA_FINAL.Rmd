@@ -1,0 +1,270 @@
+---
+title: "Q4_EDA_FINAL"
+author: "Brian Wimmer"
+date: "2022-12-04"
+output: html_document
+---
+```{r}
+# Load libraries
+library(ggplot2)
+library(tidyverse)
+library(psych) 
+library(dplyr)
+library(arsenal)
+library(gridExtra)
+library(grid)
+```
+
+```{r}
+# Load data
+
+# Edy Playlist 
+edy <- read.csv('/Users/brianwimmer/Desktop/Georgetown/ANLY 511/Final Project/edyPlaylist.csv')
+```
+
+```{r}
+# cleaning for EDA purposes
+
+# remove full date from track.album.release_date, keep only the year
+edy$track.album.release_date <- substr(edy$track.album.release_date, 0, 4)
+
+# convert track.album.release date to numeric
+edy$track.album.release_date <- as.numeric(edy$track.album.release_date)
+
+# doing this may not be necessary, but incase we want it to make numbers seem smaller
+# convert duration_ms to duration_s (milliseconds to seconds)
+edy$track.duration_ms <- edy$track.duration_ms / 1000
+
+# round up to nearest second
+edy$track.duration_ms <- round(edy$track.duration_ms, digits = 0)
+
+# rename duration_ms to duration_s
+names(edy)[6] ="track.duration_s"
+
+# create decade column for EDA
+edy <- edy %>% 
+  mutate(
+    decade = case_when(
+      track.album.release_date >= 1950 & track.album.release_date < 1960    ~ "1950s",
+      track.album.release_date >= 1960 & track.album.release_date < 1970  ~ "1960s",
+      track.album.release_date >= 1970 & track.album.release_date < 1980  ~ "1970s",
+      track.album.release_date >= 1980 & track.album.release_date < 1990   ~ "1980s",
+      track.album.release_date >= 1990 & track.album.release_date < 2000   ~ "1990s",
+      track.album.release_date >= 2000 & track.album.release_date < 2010   ~ "2000s",
+      track.album.release_date >= 2010 & track.album.release_date < 2020   ~ "2010s",
+      track.album.release_date >= 2020    ~ "2020s"))
+```
+
+```{r}
+# summary statistics of columns 3, 4, 6:15 
+summary(edy[c(3,4,6:15)])
+```
+Summary statistics for the playlist variables. From the table above, we can see the minimum, maximum, 1st quartile, 3rd quartile, mean, and median for each of the variables. We will explore the distributions and mean values of some of the variables below. These include the popularity, which is our response variable, as well as some of the other variables that we believe may be the most important predictors.
+
+```{r}
+# EDA for Song Popularity
+
+# color pallete (3rd down with 12 colors): https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+
+# Histogram for non-audio feature variable (response variable - popularity)
+# track.popularity
+popularity.hist <- ggplot(edy, aes(x=track.popularity))+
+  geom_histogram(binwidth = 5, color="black", fill="#88ccee")+
+  labs(title="Histogram Distribution of Song Popularity",x="Popularity", y = "Count")+
+  scale_x_continuous(breaks=seq(0,90,10))+
+  scale_y_continuous(breaks=seq(0,125,25))+
+  annotate("text", x=8, y=100, label= "mean = 53")+
+  theme(plot.title = element_text(size = 11, hjust = 0.5), plot.caption = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#popularity.hist
+
+# Boxplot for non-audio feature variable (response variable - popularity)
+# track.popularity
+popularity.box <- edy %>%
+  ggplot(aes(x = track.popularity)) +
+  geom_boxplot(fill = '#88ccee') + labs(title = "Boxplot Distribution of Song Popularity")+
+  xlab("Popularity")+
+  annotate("text", x=12, y=0.35, label= "median = 57")+
+  theme(plot.title = element_text(size = 11, hjust = 0.5), plot.caption = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#popularity.box
+```
+
+```{r}
+# Display EDA for Song Popularity
+# Histogram and Boxplot arranged in 1x2 grid
+grid.arrange(popularity.hist, popularity.box, ncol = 2, bottom=textGrob("Figure 4.1: Distribution of Song Popularity", gp = gpar(fontsize = 9)))
+```
+<br />
+In Figure 4.1, we can see both a histogram and boxplot for the distribution of song popularity in the playlist. On the left, the histogram shows that the mean popularity for the songs is 53. This indicates that the mean popularity is moderate. We can also see the distribution is slightly left-skewed, indicating that the songs in the playlist might have an overall higher popularity.  
+
+On the right, the boplot shows the median popularity for the songs is 57. We can also see that the 1st quartile of songs has a popularity range between 39 and 57, while the 3rd quartile of songs has a popularity range between 57 and 70. 
+
+
+```{r}
+# Histograms for audio feature variables (only 6 we want EDA for in report, others will be in Appendix)
+# danceability, energy, loudness, acousticness, valence, & tempo
+
+# color pallete (3rd down with 12 colors): https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+
+# danceability
+dance.hist <- ggplot(edy, aes(x=danceability))+
+  geom_histogram(binwidth = .1, color="black", fill="#cc6677")+
+  labs(x="Danceability", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,200,50))+
+  annotate("text", x=0.25, y=200, label= "mean = 0.55",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#dance.hist
+
+# energy
+energy.hist <- ggplot(edy, aes(x=energy))+
+  geom_histogram(binwidth = .1, color="black", fill="#aa4499")+
+  labs(x="Energy", y = "Count")+
+  scale_x_continuous(breaks=c(0.00,0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,200,50))+
+  annotate("text", x=0.15, y=200, label= "mean = 0.62",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#energy.hist
+
+# loudness
+loud.hist <- ggplot(edy, aes(x=loudness))+
+  geom_histogram(bins = 10, color="black", fill="#661100")+
+  labs(x="Loudness", y = "Count")+
+  scale_y_continuous(breaks=seq(0,375,75))+
+  annotate("text", x=-28.5, y=375, label= "mean = -8.62",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#loud.hist
+
+# acousticness
+acous.hist <- ggplot(edy, aes(x=acousticness))+
+  geom_histogram(binwidth = .1, color="black", fill="#44aa99")+
+  labs(x="Acousticness", y = "Count")+
+  scale_x_continuous(breaks=c(0.00, 0.25,0.50,0.75,1.00))+
+  annotate("text", x=0.83, y=300, label= "mean = 0.33",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#acous.hist
+
+# valence
+val.hist <- ggplot(edy, aes(x=valence))+
+  geom_histogram(binwidth = .1, color="black", fill="#999933")+
+  labs(x="Valence", y = "Count")+
+  scale_y_continuous(breaks=seq(0,125,25))+
+  annotate("text", x=0.85, y=125, label= "mean = 0.48",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#val.hist
+
+# tempo
+tempo.hist <- ggplot(edy, aes(x=tempo))+
+  geom_histogram(bins = 10, color="black", fill="#888888")+
+  labs(x="Tempo", y = "Count")+
+  scale_y_continuous(breaks=seq(0,250,50))+
+  annotate("text", x=180, y=275, label= "mean = 119.87",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#tempo.hist
+```
+
+
+```{r}
+# Display only 6 EDA chosen variables, other 3 variables are in Appendix
+# Histograms arranged in 2x3 grid
+
+grid.arrange(dance.hist, energy.hist, loud.hist, acous.hist, val.hist, tempo.hist, ncol = 3, bottom=textGrob("Figure 4.2: Histograms of Predictor Variables", gp = gpar(fontsize = 9)))
+```
+<br />
+In Figure 4.2, we can see the distributions of six of our predictor variables. We chose to display these initially, as we believe they may have the most significant effect on our response variable of popularity. It is important to note that we will begin our testing with more predictor variables than shown.  
+
+Each histogram plot displays the distribution and mean of each predictor variable: danceability, energy, loudness, acousticness, valence, and tempo. 
+
+
+```{r}
+# Bar plot of decade variable, count of songs by decade
+
+# get counts
+#table(edy['decade'])
+# 1950s 1960s 1970s 1980s 1990s 2000s 2010s 2020s 
+#    2     8    43    67    83   331   392    50 
+
+decade.totals <- data.frame(Decade=c("1950s","1960s","1970s","1980s",
+                                     "1990s","2000s","2010s","2020s"),
+                     Count=c(2,8,43,67,83,331,392,50))
+
+ggplot(decade.totals, aes(x=Decade, y=Count, fill=Decade)) + 
+       geom_bar(stat="identity")+
+       labs(title="Count of Songs by Decade", x="Decade", y = "Count", 
+       caption = "Figure 4.3: Barplot of Songs by Decade")+
+       scale_fill_manual(values=c("#888888", "#DDCC77", "#AA4499", "#332288", 
+                                  "#CC6677", "#88CCEE", "#44AA99", "#117733"))+
+       theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))+
+       geom_text(aes(label = Count), vjust = -0.2)
+```
+<br />
+In Figure 4.3, we can see a count of songs within the playlist by decade released. As we go through our testing, it is important to note that the playlist may not be fully representative of every song on Spotify. Our playlist, for example, has a majority of songs from this millennium. In the barplot, it is clear that the 2000s and 2010s decades were the most represented in the playlist, while the 1950s and 1960s were the least represented. As new music is released, a users' overall songs and playlist may reflect this change, with newer music making up a higher proportion.
+
+
+
+
+
+```{r}
+# Appendix - Histograms for non-audio feature variables (track.album.release_date & track.duration_s)
+
+# color pallete (3rd down with 12 colors): https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+
+# track.album.release_date
+date.hist <- ggplot(edy, aes(x=track.album.release_date))+
+  geom_histogram(binwidth = 2, color="black", fill="#332288")+
+  labs(title="Distribution of Release Date",x="Year", y = "Count")+
+  scale_x_continuous(breaks=c(1950,1960,1970,1980,1990,2000,2010,2020))+
+  scale_y_continuous(breaks=seq(0,150,25))+
+  annotate("text", x=1958, y=125, label= "mean = 2005")+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+date.hist
+
+# track.duration_s
+duration.hist <- ggplot(edy, aes(x=track.duration_s))+
+  geom_histogram(binwidth = 30, color="black", fill="#882255")+
+  labs(title="Distribution of Song Duration (seconds)",x="Duration (in seconds)", y = "Count")+
+  scale_x_continuous(breaks=seq(0,900,60))+
+  scale_y_continuous(breaks=seq(0,250,50))+
+  annotate("text", x=90, y=225, label= "mean = 246")+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+duration.hist
+```
+
+```{r}
+# Appendix - Histograms for audio feature variables
+# speechiness, instrumentalness, & liveness
+
+# color pallete (3rd down with 12 colors): https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+
+# speechiness
+speech.hist <- ggplot(edy, aes(x=speechiness))+
+  geom_histogram(binwidth = .05, color="black", fill="#ddcc77")+
+  labs(title="Distribution of Speechiness",x="Speechiness", y = "Count")+
+  scale_x_continuous(breaks=c(0.0, 0.1, 0.2, 0.3, 0.4, 0.5))+
+  annotate("text", x=0.5, y=750, label= "mean = 0.07")+
+  theme(plot.title = element_text(hjust = 0.5))
+speech.hist
+
+# instrumentalness
+instr.hist <- ggplot(edy, aes(x=instrumentalness))+
+  geom_histogram(binwidth = .1, color="black", fill="#6699cc")+
+  labs(title="Distribution of Instrumentalness",x="Instrumentalness", y = "Count")+
+  annotate("text", x=1, y=800, label= "mean = 0.14")+
+  theme(plot.title = element_text(hjust = 0.5))
+instr.hist
+
+# liveness
+live.hist <- ggplot(edy, aes(x=liveness))+
+  geom_histogram(binwidth = .1, color="black", fill="#117733")+
+  labs(title="Distribution of Liveness",x="Liveness", y = "Count")+
+  scale_y_continuous(breaks=seq(0,500,100))+
+  annotate("text", x=1, y=550, label= "mean = 0.19")+
+  theme(plot.title = element_text(hjust = 0.5))
+live.hist
+```
+

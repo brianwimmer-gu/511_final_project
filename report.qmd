@@ -1,0 +1,1209 @@
+---
+title: "Comparing Music Characteristics Across Nations"
+author: "Eduardo Armenta, Brendan Baker, Brian Wimmer"
+format:
+  html:
+    toc: true
+    toc-title: On this page
+    toc-location: left
+    toc-float:
+      collapsed: true
+      smooth_scrool: true
+    toc-depth: 5
+    code-fold: true
+    code-overflow: scroll
+    theme:
+      light: lumen
+      dark: darkly
+    df-print: kable
+editor: visual
+---
+
+# Introduction
+
+## Quick notes on this report
+
+-   Whenever you see a button that says code, you can press on it and code will unfold for you to see. The code will usually pertain to the material that follows the button.
+
+-   Our interest in the project comes from wanting to understand the relationships between countries and their music.
+
+-   If you'd like to switch between light and dark themes, there is a toggle at the top right of the page. Feel free to use it!
+
+-   To see variable descriptions, please find descriptions in the appendix.
+
+## Project intro
+
+Given that music has, is, and will continue to be one of the strongest influences in human culture/life, it has given way to plenty of debate. Debates such as which decade has the best music, what makes music good, etc. One of the reasons for such debate has been the evolution of sound, and how it has changed music. The problem with debate is that it's subjective. To remove subjectiveness from the topic, we want to answer certain questions using statistical methods. 
+
+After some brainstorming, we settled on 4 questions:
+
+1.  Do the variable scores between the variables x, y, and z for songs from the UK US top 50 charts vary, or are they on average the same?
+
+2.  Is the average duration of a song from the 70's higher than the average duration of a song from the 2010's?
+
+3.  Does the playlist label (i.e. MX or US) affect x, y, and z variables? In other words, are the variable values dependent on their label?
+
+4.  Is there a relationship between the variables values and their popularity scores? Linear regression would be a good model to find these relationships.
+
+The intention here is to compare the taste of two nations that speak the same language, find if songs have gotten shorter over the past 5 decades, understand if variables vary depending on the country's taste, and to find if variable values can affect the popularity score or if popularity is more of an abstract concept that can't be predicted based on the available variables.
+
+# Data
+
+## Gathering
+
+With the aforementioned questions in mind, we quickly understood that Spotify's API would help us get all the data we need. With the API, we retrieved information on the following playlists: Mexico Top 50, USA Top 50, UK Top 50, music from the 70's, 80's, 90', 2000's, and 2010's, and last but not least, a personally-curated playlist with over 950\~ songs that we would use for a regression model. The data would be returned in a data frame format, with over 60 variables per song. We decided to remove most of them and keep the ones that would help us answer the questions we were interested in.
+
+```{r spotify data, message=FALSE}
+
+# load libraries
+library(Rspotify)
+library(httr)
+library(jsonlite)
+library(spotifyr)
+library(dplyr)
+
+# authenticate user
+my_token <- get_spotify_access_token(client_id='71995685ca2446b2b6e2e41d3e0e5b7a', client_secret='c36f1c3a69a241d4a8d45240c42873b0')
+
+# grab the playlist of Top 50 Mexico
+mex <- get_playlist_audio_features(
+  username = 'spotify',
+  playlist_uris = '37i9dQZEVXbO3qyFxbkOE1',
+  authorization = my_token)
+
+# select the columns we want
+filteredMex <- mex %>% select(track.name, track.album.release_date, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+
+# add playlist column
+filteredMex$Playlist <- 'Mex50'
+
+# export to csv, commenting out because we don't need to do this again
+# write.csv(filteredE, './edyPlaylist.csv')
+
+# show first 5 rows
+df <- as.data.frame(filteredMex)
+head(df)
+```
+
+## Cleaning
+
+Spotify's data is kept in perfect conditions. We looked for outliers, inconsistencies, and anything that would require us to clean the data but found nothing. There were only two things we did with the data that might fall under the cleaning umbrella. The first: removing variables we had no interest in. With over 50 variables in the data frames, we decided to keep 15 of them and add one of our own, which denoted the playlist each song came from. The second: songs from foreign languages weren't properly spelled because the characters for accents would turn into other symbols. Since we're not using the names of the songs, we decided to ignore this issue and move on with the project.
+
+# Testing
+
+## UK vs US Top 50
+
+### Question
+
+Do the characteristics of popular songs vary between countries that speak the same language?
+
+To answer this question, we will explore the top 50 most popular songs playlists between the United States and the United Kingdom. We wanted to see if there happens to be a difference in the most popular songs, even though they speak the same language and would be expected to listen to similar music and genres. Typically, the United Kingdom tends to have very upbeat songs, such as pop, dance, and EDM, topping the charts each week. On the other hand, the United States seems to favor other types of music, like rap, country, and soft-pop. For this analysis we will compare danceability, energy, and valence of the top 50 songs. We will use a two-sample t-test for each of the three variables.
+
+### EDA
+
+```{r}
+# creating variable for file paths
+edyPath <- './GitHub/edyPlaylist.csv'
+usPath <- './GitHub/filtered_usa_top50.csv'
+mexPath <- './Github/mex50.csv'
+ukPath <- './GitHub/filtered_uk_top50.csv'
+decadesPath <- "./GitHub/spotify_decades.csv"
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(psych) 
+library(dplyr)
+library(arsenal)
+library(gridExtra)
+library(grid)
+
+# Load data
+# Top 50 USA
+usa <- read.csv(usPath)
+# Top 50 UK
+uk <- read.csv(ukPath)
+
+# adding "country" column to each df; will be used for EDA purposes
+usa$country <- "USA"
+uk$country <- "UK"
+
+# combine usa and uk into one df
+both <- rbind(usa, uk)
+
+# create df of both with just three variables (danceability, energy, and valence) of interest and country
+both.interest <- both %>% select(danceability, energy, valence, country)
+
+# summary statistics - USA
+summary(usa[c('danceability', 'energy', 'valence')])
+
+# summary statistics - UK
+summary(uk[c('danceability', 'energy', 'valence')])
+```
+
+Comparison of Danceability - very minimal difference in the mean of danceability. UK is 0.64 and USA is 0.63. Expected UK to be higher as their charts often reflect more dance/edm/pop songs ("club music"). Danceability represents a combination of tempo, rhythm stability, beat strength, and regularity.
+
+Comparison of Energy - somewhat significant difference in the mean of energy. UK is higher at 0.62 and USA is lower at 0.54. Energy represents the intensity and activity of a song, thought this would compare easily to danceability but they are different.
+
+Comparison of Valence - somewhat significant difference in the mean of valence. UK is higher at 0.5 and USA is lower at 0.4. Valence compares the musical positiveness of a song, higher value means more positive.
+
+```{r}
+# Boxplots for variables of interest
+# Boxplot for danceability variable
+dance.box <- both %>%
+  ggplot( aes(x = country, y = danceability, fill=country)) +
+  geom_boxplot() + labs(title = "Danceability") +
+  scale_fill_manual(values = c("#6699cc", "#cd5c5c")) +
+  xlab("Country") + ylab("Danceability") + 
+  scale_y_continuous(breaks = c(0.25,0.50,0.75,1.00)) +
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5), legend.position="none")
+#dance.box
+# Boxplot for energy variable
+energy.box <- both %>%
+  ggplot( aes(x = country, y = energy, fill=country)) +
+  geom_boxplot() + labs(title = "Energy") +
+  scale_fill_manual(values = c("#6699cc", "#cd5c5c")) +
+  xlab("Country") + ylab("Energy") + 
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5), legend.position="none")
+#energy.box
+# Boxplot for valence variable
+valence.box <- both %>%
+  ggplot( aes(x = country, y = valence, fill=country)) +
+  geom_boxplot() + labs(title = "Valence") +
+  scale_fill_manual(values = c("#6699cc", "#cd5c5c")) +
+  xlab("Country") + ylab("Valence") +
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5), legend.position="none")
+#valence.box
+# Display Boxplots for chosen variables 
+# Boxplots arranged in 1x3 grid
+grid.arrange(dance.box, energy.box, valence.box, ncol = 3, bottom=textGrob("Figure 1.1: Boxplots of Variables of Interest", gp = gpar(fontsize = 9)))
+```
+
+In Figure 1.1, we can visualize the five-number summary of each variable using boxplots. Each boxplot is grouped by country, with blue representing the UK and red representing the USA.
+
+The danceability boxplot (far-left) shows that there is not much difference at all between the countries. The median danceability is slightly higher for the USA (0.65) than the UK (0.64). The interquartile range is also slightly larger for the USA than the UK.
+
+The energy boxplot (middle) shows that there is a significant difference between the countries. The median energy is higher for the UK (0.62) than the USA (0.53). The interquartile range is also much larger for the UK than the USA.
+
+The valence boxplot (far-right) shows that there is some difference between the countries. The median valence is higher for the UK (0.43) than the USA (0.36). The interquartile range is also higher for the UK than the USA.
+
+```{r}
+# Histogram for danceability variable, side-by-side
+uk.dance.hist <- ggplot(uk, aes(x=danceability)) +
+  geom_histogram(binwidth=.1, color="black", fill="#6699cc") +
+  labs(x="Danceability (UK) ", y = "Count") +
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00)) +
+  scale_y_continuous(breaks=seq(0,20,2)) +
+  annotate("text", x=0.25, y=15, label= "mean = 0.64", size = 3) + 
+  theme(plot.title = element_text(size = 10, hjust = 0.5), axis.title = element_text(size = 9))
+#uk.dance.hist
+usa.dance.hist <- ggplot(usa, aes(x=danceability)) +
+  geom_histogram(binwidth=.1, color="black", fill="#cd5c5c") +
+  labs(x="Danceability (USA)", y = NULL) +
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00)) +
+  scale_y_continuous(breaks=seq(0,20,2)) +
+  annotate("text", x=0.25, y=14, label= "mean = 0.63", size = 3) + 
+  theme(plot.title = element_text(size = 10, hjust = 0.5), axis.title = element_text(size = 9))
+#usa.dance.hist
+#grid.arrange(uk.dance.hist, usa.dance.hist, ncol = 2, bottom=textGrob("Figure 1.4: Histograms of Danceability by Country", gp = gpar(fontsize = 9)))
+# Histogram for energy variable, side-by-side
+uk.energy.hist <- ggplot(uk, aes(x=energy)) +
+  geom_histogram(binwidth=.1, color="black", fill="#6699cc") +
+  labs(x="Energy (UK)", y = "Count") +
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00)) +
+  scale_y_continuous(breaks=seq(0,20,2)) +
+  annotate("text", x=0.25, y=9, label= "mean = 0.62", size = 3) + 
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#uk.energy.hist
+usa.energy.hist <- ggplot(usa, aes(x=energy))+
+  geom_histogram(binwidth=.1, color="black", fill="#cd5c5c") +
+  labs(x="Energy (USA)", y = NULL) +
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00)) +
+  scale_y_continuous(breaks=seq(0,20,2)) +
+  annotate("text", x=0.25, y=15, label= "mean = 0.54", size = 3) + 
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#usa.energy.hist
+#grid.arrange(uk.energy.hist, usa.energy.hist, ncol = 2, bottom=textGrob("Figure 1.5: Histograms of Energy by Country", gp = gpar(fontsize = 9)))
+# Histogram for valence variable, side-by-side
+uk.valence.hist <- ggplot(uk, aes(x=valence)) +
+  geom_histogram(binwidth=.1, color="black", fill="#6699cc") +
+  labs(x="Valence (UK)", y = "Count") +
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00)) +
+  scale_y_continuous(breaks=seq(0,20,2)) +
+  annotate("text", x=0.95, y=8, label= "mean = 0.5", size = 3)+ 
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#uk.valence.hist
+usa.valence.hist <- ggplot(usa, aes(x=valence)) +
+  geom_histogram(binwidth=.1, color="black", fill="#cd5c5c") +
+  labs(x="Valence (USA)", y = NULL) +
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00)) +
+  scale_y_continuous(breaks=seq(0,20,2)) +
+  annotate("text", x=0.85, y=10, label= "mean = 0.4", size = 3) + 
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#usa.valence.hist
+#grid.arrange(uk.valence.hist, usa.valence.hist, ncol = 2, bottom=textGrob("Figure 1.6: Histograms of Valence by Country", gp = gpar(fontsize = 9)))
+
+grid.arrange(uk.dance.hist, usa.dance.hist, uk.energy.hist, usa.energy.hist, uk.valence.hist, usa.valence.hist,ncol = 2, bottom=textGrob("Figure 1.2: Histograms of Variables of Interest", gp = gpar(fontsize = 9)))
+```
+
+In Figure 1.2, we can visualize the distribution of each variable using histograms. Each histogram is shown by country, with blue representing the UK and red representing the USA.
+
+The danceability histograms (top) show that there is not much difference between the countries. The mean danceability is slightly higher for the UK (0.64) than the USA (0.63).
+
+The energy histograms (middle) show that there is a difference between the countries. The mean energy is higher for the UK (0.62) than the USA (0.54).
+
+The valence histograms (bottom) show that there is a difference between the countries. The mean valence is higher for the UK (0.5) than the USA (0.4).
+
+### Testing
+
+```{r}
+set.seed(1999)
+# Hypothesis Testing - T-test for danceability
+uk.dance <- subset(both.interest, select=danceability, subset=country=="UK", drop=T)
+usa.dance <- subset(both.interest, select=danceability,subset=country=="USA", drop=T)
+t.test(uk.dance, usa.dance, alt="greater")
+```
+
+Interpretation - Since p-value is greater than 0.05, at 5% significance level, we have enough evidence to conclude that we fail to reject the null hypothesis. Therefore there is not strong evidence that the danceability of music in the top 50 in the UK is higher than music in the top 50 in the USA.
+
+```{r}
+set.seed(1999)
+# Hypothesis Testing - T-test for energy
+uk.energy <- subset(both.interest, select=energy, subset=country=="UK", drop=T)
+usa.energy <- subset(both.interest, select=energy,subset=country=="USA", drop=T)
+t.test(uk.energy, usa.energy, alt="greater")
+```
+
+Interpretation - Since p-value is less than 0.05, at 5% significance level, we have enough evidence to conclude that we reject the null hypothesis. Therefore there is strong evidence that the energy of music in the top 50 in the UK is higher than music in the top 50 in the USA.
+
+```{r}
+set.seed(1999)
+# bootstrap ratio of means of energy
+N <- 10000
+energy.diff.mean.ratio <- numeric(N) 
+for (i in 1:N)
+{
+uk.sample <- sample(uk.energy, 50, replace = TRUE)
+usa.sample <- sample(usa.energy, 50, replace = TRUE) 
+energy.diff.mean.ratio[i] <- mean(uk.sample) / mean(usa.sample)
+}
+#hist(energy.diff.mean.ratio,main = "Bootstrap Distribution of Difference in Mean of Energy", col = '#6666cc', xlab = 'Difference in Mean of Energy')
+#abline(v = mean(uk.energy) / mean(usa.energy), col = "black", lty = 2)
+
+# 95 percent confidence interval
+quantile(energy.diff.mean.ratio, c(0.025, 0.975))
+```
+
+The 95% bootstrap percentile confidence interval for the ratio of means (UK energy / USA energy) is (1.03, 1.32). Thus, we are 95% confident that the energy of top 50 UK songs are, on average, between 1.03 and 1.32 times greater than top 50 USA songs.
+
+```{r}
+# create copy of energy.diff.mean.ratio into df
+energy.diff.mean.ratio.df <- as.data.frame(energy.diff.mean.ratio)
+# Histogram for bootstrap ratio of means of energy
+boot.energy.hist <- ggplot(energy.diff.mean.ratio.df, aes(x=energy.diff.mean.ratio))+
+  geom_histogram(binwidth=0.05, color="black", fill="#6666cc")+
+  labs(title="Bootstrap Distribution of Difference in Mean of Energy", x = "Difference in Mean of Energy", y = "Frequency", caption = "Figure 1.7: Histogram of Bootstrap Difference in Mean of Energy")+
+  annotate("text", x=.95, y=2500, label= "mean ratio = 1.165")+
+  scale_x_continuous(breaks=c(0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5))+
+  scale_y_continuous(breaks=seq(0,2500,500))+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))+                     
+  geom_vline(xintercept = mean(mean(uk.energy) / mean(usa.energy)), col = "black", linetype="dashed")
+boot.energy.hist
+```
+
+In Figure 1.7, we can see the distribution of the difference in mean energy between the UK and the USA. The difference in the ratio of mean of energy is 1.165. On average, UK top 50 songs are 1.165 times greater than that of the USA top 50 songs.
+
+```{r}
+set.seed(1999)
+# Hypothesis Testing - T-test for valence
+uk.valence <- subset(both.interest, select=valence, subset=country=="UK", drop=T)
+usa.valence <- subset(both.interest, select=valence,subset=country=="USA", drop=T)
+t.test(uk.valence, usa.valence, alt="greater")
+```
+
+Interpretation - Since p-value is less than 0.05, at 5% significance level, we have enough evidence to conclude that we reject the null hypothesis. Therefore there is strong evidence that the valence of music in the top 50 in the UK is higher than music in the top 50 in the USA.
+
+```{r}
+set.seed(1999)
+# bootstrap ratio of means of valence
+N <- 10000
+valence.diff.mean.ratio <- numeric(N) 
+for (i in 1:N)
+{
+uk.sample <- sample(uk.valence, 50, replace = TRUE)
+usa.sample <- sample(usa.valence, 50, replace = TRUE) 
+valence.diff.mean.ratio[i] <- mean(uk.sample) / mean(usa.sample)
+}
+#hist(valence.diff.mean.ratio,main = "Bootstrap Distribution of Difference in Mean of Valence", col = '#6666cc', xlab = 'Difference in Mean of Valence')
+#abline(v = mean(uk.valence) / mean(usa.valence), col = "black", lty = 2)
+# 95 percent confidence interval
+quantile(valence.diff.mean.ratio, c(0.025, 0.975))
+```
+
+The 95% bootstrap percentile confidence interval for the ratio of means (UK valence / USA valence) is (1, 1.59). Thus, we are 95% confident that the valence of top 50 UK songs are, on average, between 1 and 1.59 times greater than top 50 USA songs.
+
+```{r}
+# create copy of valence.diff.mean.ratio into df
+valence.diff.mean.ratio.df <- as.data.frame(valence.diff.mean.ratio)
+# Histogram for bootstrap ratio of means of energy
+boot.valence.hist <- ggplot(valence.diff.mean.ratio.df, aes(x=valence.diff.mean.ratio))+
+  geom_histogram(binwidth=0.09, color="black", fill="#6666cc")+
+  labs(title="Bootstrap Distribution of Difference in Mean of Valence", x = "Difference in Mean of Valence", y = "Frequency", caption = "Figure 1.8: Histogram of Bootstrap Difference in Mean of Valence")+
+  annotate("text", x=.95, y=2500, label= "mean ratio = 1.26")+
+  scale_x_continuous(breaks=c(0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0))+
+  scale_y_continuous(breaks=seq(0,2500,500))+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))+                     
+  geom_vline(xintercept = mean(mean(uk.valence) / mean(usa.valence)), col = "black", linetype="dashed")
+boot.valence.hist
+```
+
+In Figure 1.8, we can see the distribution of the difference in mean valence between the UK and the USA. The difference in the ratio of mean of valence is 1.26. On average, UK top 50 songs are 1.26 times greater than that of the USA top 50 songs.
+
+### Results
+
+After conducting each test, we noted some important findings regarding the difference in top 50 songs for the UK and USA. We expected all three variables to be of higher value in for the UK songs than the US songs, but that was only true for energy and valence. There was no clear difference in the average danceability between the UK and the USA, thus we failed to reject the null hypothesis. For energy and valence, we found enough evidence to reject the null hypothesis, concluding that both of the variables were higher for the UK than the USA. UK top 50 songs, on average, have more energy (1.16 times greater) and are more positive (1.26 times greater) than songs of the USA top 50.
+
+## Decade vs Decade
+
+### Question
+
+Has music become louder over time?
+
+Music can be considered a defining characteristic of a generation. The most popular songs of a decade often reflect the general culture, philosophy, and sentiment of that time. For this reason, our second question set out to examine how popular music has changed over time on a decade-by-decade basis. Specifically, we set out to see what variables have most drastically changed over time, and whether identifying these changes might be informative with respect to trends in popular culture. After some exploratory analysis, hypothesis testing was conducted on mean differences in track loudness over the decades using pairwise t-tests and analysis of variance (ANOVA).
+
+The first step in the process was to gather appropriate data to explore. Spotify maintains a playlist for each decade from 1950 to 2010 entitled "All out" followed by the decade. These playlists reflect the most popular songs from that decade in the United States. While Spotify is not transparent about their sampling method for the playlist, it is assumed that these playlists are based on the top charts from each decade. The current decade was also included for continuity, and in this case the Spotify "top tracks" playlists were used for each year of the decade thus far (2020, 2021, 2022). All data were gathered from the Spotify API, using the SpotifyR package.
+
+The dataset was checked for missing values and duplicate song names. No missing values were detected and any duplicate songs were removed. Only non-categorical (continuous) track features were considered in the analysis since the planned hypothesis tests were only suitable for numerical data. Track identifiers were omitted. Popularity was dropped as a variable since all songs in the analysis were retrieved from top charts. After these steps were applied, the final dataset contained 9 features, one categorical decade label, and 1,329 songs (10 x 1329 matrix).
+
+### EDA
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(viridis)
+
+# Read in data 
+decades <- read_csv(decadesPath) %>% rename(decade = tag)
+
+# Pivot for suitable graphing with facets 
+songs_long <- decades %>% pivot_longer(cols = colnames(decades)[5:14], names_to = "Measure", values_to = "Score") %>% mutate(decade = as.factor(decade))
+
+# Discard instrumentalness (little variance)
+songs_long <- songs_long[songs_long$Measure!="instrumentalness",]
+
+# Graph overall trends
+mean_data <- songs_long %>% group_by(decade, Measure) %>%
+  summarise(across(.cols = Score, .fns = mean))
+
+# Rename track duration 
+mean_data[mean_data$Measure=="track.duration_ms",]$Measure <- "track.duration"
+
+# Graph trend
+mean_data %>%
+  ggplot(aes(x = decade, y = Score)) + facet_wrap(~Measure, scales = "free", nrow = 3) +
+  geom_line(aes(group = 1, color = Measure)) + geom_point(alpha = .9, color = "black") + 
+  labs(title = "Mean of Song Variables by Decade,\n1950-2020") + 
+  theme(text = element_text(size = 14), axis.text.x = element_text( 
+                           size=9.5, angle=45))
+
+# Distribution of loudness for each decade
+decades %>% mutate(decade = as.factor(decade)) %>% 
+  ggplot(aes(x = loudness)) + facet_wrap(~decade) + geom_histogram(aes(fill = decade), color = "black") +
+  labs(title = "Distribution of Loudness Scores for Each Decade\n1950-2020", x = "Loudness (dB)", y = "Number of Songs") +
+  theme(text = element_text(size = 14), axis.text.x = element_text(size=10, angle=45))
+
+# Violin plot of loudness for each decade
+decades %>% mutate(decade = as.factor(decade)) %>% ggplot(aes(decade, loudness)) +
+  geom_violin(aes(group = decade, fill = decade)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red", outlier.shape = 2, width=0.1) +
+  labs(title = "Violin Plot of Loudness for Popular Songs of Each Decade\n1950-2020", x = "Decade", y = "Loudness Score (dB)") +
+  scale_fill_viridis(discrete = T, option = "magma") +
+  theme(text = element_text(size = 14))
+```
+
+The mean trends for each variable were visualized in a ggplot facet grid. Based on the EDA, one of the clearest trends identified in the first plot above is in the loudness variable. Loudness is also one of the most objective measures in the dataset since it is measured in decibels (dB). For these reasons, loudness was selected as the feature of interest. Next, the distribution of each decade's loudness score (in decibels) was also plotted to determine its suitability for parametric hypothesis tests. Each decade's loudness distribution appeared approximately gaussian, and we proceeded with the parametric hypothesis tests since they are robust to moderate deviations from normality.
+
+### Testing
+
+**ANOVA**
+
+After EDA, we conducted an analysis of variance (ANOVA) test on the loudness scores of each decade. An ANOVA is an univariate test to determine whether a variable is different under the conditions of a categorical variable. This test will help us determine whether, in general, there is a difference in mean loudness among the decade groups, however it will not inform us specifically as to the directionality of the difference or which decades differ specifically. The null and alternative hypothesis are as follows:
+
+$$H_0: \mu_{1950} = \mu_{1960} = \mu_{1970} = \mu_{1980} = \mu_{1990} = \mu_{2000} = \mu_{2010} = \mu_{2020}$$ Or in other words, there is no difference in mean loudness scores among the decades.
+
+$H_a:$ The mean loudness scores are not equal.
+
+```{r}
+# Anova for loudness
+summary(aov(loudness ~ as.factor(decade), data = decades))
+```
+
+The results of our ANOVA test revealed
+
+$$
+F(7, 1321) = 76.8, p < 0.001
+$$
+
+Based on the results of our ANOVA test, we determined that not all mean loudness values are the same for every decade.
+
+**Pairwise t-tests**
+
+The next step in our analysis was to determine which decades had mean loudness scores that significantly differed from each other. To this effect, we decided to conduct pairwise t-tests on the loudness scores between each decade to determine which decades are different from one another. Since there are 8 decades available to us, the number of pairwise t-tests required was:
+
+$$
+C(8,2) = \frac{8!}{2!(8-2)!} = 28
+$$
+
+Since this is a large number of t-tests, we must adjust for multiple comparisons. The Benjamini and Hochberg adjustment method was used to adjust the p-value by controlling the False Discovery Rate (FDR), which is the expected proportion of false positives (Jafari & Ansari-Pour, 2018; Benjamini & Hochberg, 2000). This is a slightly less conservative method than the Bonferroni method, which simply multiplies the raw p-values by the number of tests. The null and alternative hypothesis of each pairwise t-test is as follows:
+
+$$
+H_0: \mu_x = \mu_y
+$$
+
+In other words, there is no difference in mean loudness scores for some decade X and decade Y - the difference in means is zero. In other words, both decade X and decade Y have similar loudness scores for their tracks on average.
+
+$$
+H_a: \mu_x \neq \mu_y
+$$
+
+The difference in mean loudness scores for some decade X and decade Y are not zero. In other words, decade X and decade Y have different loudness levels on their most popular tracks on average.
+
+```{r}
+library(ggpubr)
+library(rstatix)
+library(viridis)
+# Pairwise t-tests for loudness - Hochberg correction
+loud.test <- pairwise_t_test(decades, loudness ~ decade, paired = F, p.adjust.method = "hochberg")
+
+# Pairwise t-test matrix
+loud.test2 <- pairwise.t.test(decades$loudness, decades$decade, p.adjust.method = "hochberg")
+
+# Heat map of p-values
+# Heatmap with t-test results
+loud.data <- reshape2::melt(loud.test2$p.value) %>% mutate(value = round(value, 3))
+loud.data <- na.omit(loud.data)
+loud.data2 <- data.frame(Var1 = loud.data$Var2, Var2 = loud.data$Var1, value = loud.data$value)
+loud.matrix <- bind_rows(loud.data, loud.data2)
+
+loud.matrix %>% ggplot(aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white", lwd = 1.5, linetype = 1) +
+  geom_text(aes(label = value)) +
+  scale_x_continuous(breaks = seq(1950, 2020, 10)) + 
+  scale_y_continuous(breaks = seq(1950, 2020, 10)) +
+  labs(title = "Matrix of P-values for Pairwise t-tests\nfor Loudness Scores", x = "Decade", y = "Decade", caption = "\nNote: A value of 0 indicates P < .001",) +
+  scale_fill_gradient("P-value", low = "red", high = "lightblue") +
+  theme(text = element_text(size = 16))
+```
+
+### Results
+
+The results of our pairwise t-tests suggest that for many decades, there is a significant difference in loudness of popular songs. Specifically, from the years 1970-2000, there is a significant increase in loudness score for the most popular tracks. However, there are not significant differences in loudness for consecutive decades on the lower and upper range. For example, there is no significant difference in loudness from 1950 to 1960, 1960 to 1970, and 2010 to 2020. Notably, between 2000 and 2020, there is a significant difference in loudness for popular songs in the other direction - the loudness has decreased on average. Overall, this suggests a trend in popular music where songs have generally increased in volume on average from the period 1950-2000, and have begun to decrease in the period 2000-2020.
+
+In conclusion, the loudness in decibels of popular music has changed significantly over the decades on average. We have seen a general increase in loudness for over 6 decades, until a recent decrease in loudness over the past 20 years. While the reasons for this trend may be difficult to determine, there are a few plausible hypotheses. Genre may have a large impact - but it is also worth considering that the popularity of genres is not necessarily directly reflected in top charts. Rock, disco, and rap became in the last decades of the 1900s, then genres like punk rock, R&B, and alternative were popular in the 00's. It is surprising that in the 2010s and 2020s, a time where loud electronic music has become more popular, that we are starting to see a decrease in loudness. However, considering that top charts contain more pop music, and currently the most popular songs are from artists such as Taylor Swift, The Weeknd, Post Malone, and Lil Uzi Vert, it makes some intuitive sense that popular music has become quieter.
+
+## Mexico vs US Top 50
+
+### Question
+
+Are Valence and Danceability scores dependent on the playlist they come from (Top 50 Mexico vs Top 50 USA)?
+
+### EDA
+
+To get an initial understanding of the data, we will have to do some exploration. We believe that the mean of our selected variables will be different based on the country's playlist they belong to, but some visualizations would help in seeing the relationships more clearly. Mexico is often seen as a happy country, while the US struggles a bit more in this department; we would expect these feeling to be reflected on the music they listen to. For this, we will be comparing the Valence score of the top 50 songs from each country. For reference, a Valence Score measures (from 0 to 1) the musical positiveness conveyed by a track. Tracks with high valence sound more positive (e.g. happy, cheerful, euphoric), while tracks with low valence sound more negative (e.g. sad, depressed, angry).
+
+The other variable we'd like to compare would be the Danceability score. More often than not, people dance when they're happy. We would expected for Mexico's Danceability score to be higher than the US score. For reference, a Danceability score describes how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. A value of 0.0 is least danceable and 1.0 is most danceable.
+
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+# grab the Mexico and US Top 50 playlists
+mex <- read.csv(mexPath)
+us <- read.csv(usPath)
+# add an identifier column to the us playlist
+us$Playlist <- 'US50'
+# put both data frames into one
+both <- bind_rows(mex, us)
+
+# create the jitterplot for valence
+library(ggplot2)
+library(ggdark)
+ggplot(both, aes(x=Playlist, y=valence, color=Playlist)) +
+  geom_jitter(position=position_jitter(0.05), cex=2, shape=16) + 
+  stat_summary(fun.y=mean, geom='point', shape=18, size=3, color='black') +
+  ggtitle('Comparing Valence for the Mexico and USA Top 50 Songs') +
+  theme(plot.title = element_text(hjust = 0.5, size=16), plot.caption = element_text(hjust = 0.5)) +
+  ylab('Valence') +
+  xlab('Playlist') +
+  theme(legend.position='none') +
+  scale_color_manual(values=c("#78866b", "#cd5c5c")) +
+  labs(caption = 'Figure 3.1: Distribution of Valence for Mexico and USA Top 50')
+  #dark_mode()
+
+library(ggplot2)
+ggplot(both, aes(x=Playlist, y=danceability, color=Playlist)) +
+  geom_jitter(position=position_jitter(0.05), cex=2, shape=16) + 
+  stat_summary(fun.y=mean, geom='point', shape=18, size=3, color='black') +
+  ggtitle('Comparing Danceability for the Mexico and USA Top 50 Songs') +
+  theme(plot.title = element_text(hjust = 0.5, size=16), plot.caption = element_text(hjust = 0.5)) +
+  ylab('Danceability') +
+  xlab('Playlist') +
+  theme(legend.position='none') +
+  scale_color_manual(values=c("#78866b", "#cd5c5c")) +
+  labs(caption = 'Figure 3.2: Distribution of Danceability for Mexico and USA Top 50')
+```
+
+**Quick observation**
+
+Before trying a hypothesis test, we can make some quick observations using the visualizations. Within both, the black triangle represents the mean for the variable within their respective playlist. In both variables, the mean for Mexico is significantly higher than the mean for the US. Although Mexico's Danceability scores are noticeably more concentrated at the top of the graph, the scores for Valence have a more even distribution. Albeit, both variable means for Mexico are greatly higher than the ones for the US. If we had to make a conclusion using only EDA, I would conclude that the label does in fact afect the variable scores. But, we know better than to make conclusions based on EDA. That's why we'll do an MANOVA test.
+
+### Testing
+
+```{r}
+# code for the MANOVA test
+r.manova <- manova(cbind(danceability, valence) ~ Playlist, data=both)
+summary(r.manova)
+
+# more info
+summary.aov(r.manova)
+```
+
+### Results
+
+The MANOVA test is used to find if more than one variable are dependent on another variable. In this case, we wanted to test if Valence and Danceability scores are dependent on their class labels (i.e. whether they come from the Mexico Top 50 or US Top 50 playlist). We can take the previous sentence as our null hypothesis; if we were to reject it, that would mean that there is a relationship between playlist label and the variables of interest.
+
+After conducting the hypothesis test, the output gave us p-values smaller than 0.05, meaning that we can reject the null hypothesis. With these results, our initial thoughts are confirmed, meaning that the music coming from Mexico's and the US' top 50 playlists have differing variable scores. For Mexico, the mood and danceability of the song are high, while the US has lower average scores for both variables.
+
+## Predicting popularity
+
+After completing our exploratory data analysis (EDA) for the playlist, the next step was to fit a regression model. For our regression model, we hope to investigate the following data science question:
+
+### Question
+
+What variables contribute most to predicting a songs popularity?
+
+By using a regression model, we can determine which (if any) variables contribute to predicting a song's popularity. This could be informative from a psychological perspective in that we can determine what features of a song contribute to it's broad appeal. It could also inform musicians who hope to make popular music on what styles they should include to provide them with their best chance at reaching a broad audience. The first step in our analysis was to fit a full regression model with all variables. For our model, we will only include the continuous song variables - As the distribution of decades is highly skewed, it was removed from analysis. We will first only examine the full model with all variables and their interactions. A train-test split of 80-20 was used.
+
+### EDA
+
+```{r}
+# get necessary libraries
+library(tidyverse)
+library(psych) 
+library(dplyr)
+library(arsenal)
+library(gridExtra)
+library(grid)
+
+# load data
+edy <- read.csv(edyPath)
+
+# cleaning for EDA purposes
+# remove full date from track.album.release_date, keep only the year
+edy$track.album.release_date <- substr(edy$track.album.release_date, 0, 4)
+
+# convert track.album.release date to numeric
+edy$track.album.release_date <- as.numeric(edy$track.album.release_date)
+
+# doing this may not be necessary, but incase we want it to make numbers seem smaller
+# convert duration_ms to duration_s (milliseconds to seconds)
+edy$track.duration_ms <- edy$track.duration_ms / 1000
+
+# round up to nearest second
+edy$track.duration_ms <- round(edy$track.duration_ms, digits = 0)
+
+# rename duration_ms to duration_s
+names(edy)[6] ="track.duration_s"
+
+# create decade column for EDA
+edy <- edy %>% 
+  mutate(
+    decade = case_when(
+      track.album.release_date >= 1950 & track.album.release_date < 1960    ~ "1950s",
+      track.album.release_date >= 1960 & track.album.release_date < 1970  ~ "1960s",
+      track.album.release_date >= 1970 & track.album.release_date < 1980  ~ "1970s",
+      track.album.release_date >= 1980 & track.album.release_date < 1990   ~ "1980s",
+      track.album.release_date >= 1990 & track.album.release_date < 2000   ~ "1990s",
+      track.album.release_date >= 2000 & track.album.release_date < 2010   ~ "2000s",
+      track.album.release_date >= 2010 & track.album.release_date < 2020   ~ "2010s",
+      track.album.release_date >= 2020    ~ "2020s"))
+
+# summary statistics of columns 3, 4, 6:15 
+summary(edy[c(3,4,6:15)])
+```
+
+Summary statistics for the playlist variables. From the table above, we can see the minimum, maximum, 1st quartile, 3rd quartile, mean, and median for each of the variables. We will explore the distributions and mean values of some of the variables below. These include the popularity, which is our response variable, as well as some of the other variables that we believe may be the most important predictors.
+
+```{r, message=FALSE, warning=FALSE}
+# Histogram for non-audio feature variable (response variable - popularity)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(grid)
+
+# track.popularity
+popularity.hist <- ggplot(edy, aes(x=track.popularity))+
+  geom_histogram(binwidth = 5, color="black", fill="#88ccee")+
+  labs(title="Histogram Distribution of Song Popularity",x="Popularity", y = "Count")+
+  scale_x_continuous(breaks=seq(0,90,10))+
+  scale_y_continuous(breaks=seq(0,125,25))+
+  annotate("text", x=8, y=100, label= "mean = 53")+
+  theme(plot.title = element_text(size = 11, hjust = 0.5), plot.caption = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+
+# popularity.hist
+# boxplot for non-audio feature variable (response variable - popularity)
+# track.popularity
+popularity.box <- edy %>%
+  ggplot(aes(x = track.popularity)) +
+  geom_boxplot(fill = '#88ccee') +
+  labs(title = "Boxplot Distribution of Song Popularity") +
+  xlab("Popularity") +
+  annotate("text", x=12, y=0.35, label= "median = 57") +
+  theme(plot.title = element_text(size = 11, hjust = 0.5), plot.caption = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#popularity.box
+
+# Display EDA for Song Popularity
+# Histogram and Boxplot arranged in 1x2 grid
+grid.arrange(popularity.hist, popularity.box, ncol = 2, bottom=textGrob("Figure 4.1: Distribution of Song Popularity", gp = gpar(fontsize = 9)))
+```
+
+In Figure 4.1, we can see both a histogram and boxplot for the distribution of song popularity in the playlist. On the left, the histogram shows that the mean popularity for the songs is 53. This indicates that the mean popularity is moderate. We can also see the distribution is slightly left-skewed, indicating that the songs in the playlist might have an overall higher popularity.
+
+On the right, the boplot shows the median popularity for the songs is 57. We can also see that the 1st quartile of songs has a popularity range between 39 and 57, while the 3rd quartile of songs has a popularity range between 57 and 70.
+
+```{r}
+# Histograms for audio feature variables (only 6 we want EDA for in report, others will be in Appendix)
+# danceability, energy, loudness, acousticness, valence, & tempo
+# color pallete (3rd down with 12 colors): https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+# danceability
+dance.hist <- ggplot(edy, aes(x=danceability))+
+  geom_histogram(binwidth = .1, color="black", fill="#cc6677")+
+  labs(x="Danceability", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,200,50))+
+  annotate("text", x=0.25, y=200, label= "mean = 0.55",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#dance.hist
+# energy
+energy.hist <- ggplot(edy, aes(x=energy))+
+  geom_histogram(binwidth = .1, color="black", fill="#aa4499")+
+  labs(x="Energy", y = "Count")+
+  scale_x_continuous(breaks=c(0.00,0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,200,50))+
+  annotate("text", x=0.15, y=200, label= "mean = 0.62",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#energy.hist
+# loudness
+loud.hist <- ggplot(edy, aes(x=loudness))+
+  geom_histogram(bins = 10, color="black", fill="#661100")+
+  labs(x="Loudness", y = "Count")+
+  scale_y_continuous(breaks=seq(0,375,75))+
+  annotate("text", x=-28.5, y=375, label= "mean = -8.62",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#loud.hist
+# acousticness
+acous.hist <- ggplot(edy, aes(x=acousticness))+
+  geom_histogram(binwidth = .1, color="black", fill="#44aa99")+
+  labs(x="Acousticness", y = "Count")+
+  scale_x_continuous(breaks=c(0.00, 0.25,0.50,0.75,1.00))+
+  annotate("text", x=0.83, y=300, label= "mean = 0.33",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#acous.hist
+# valence
+val.hist <- ggplot(edy, aes(x=valence))+
+  geom_histogram(binwidth = .1, color="black", fill="#999933")+
+  labs(x="Valence", y = "Count")+
+  scale_y_continuous(breaks=seq(0,125,25))+
+  annotate("text", x=0.85, y=125, label= "mean = 0.48",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#val.hist
+# tempo
+tempo.hist <- ggplot(edy, aes(x=tempo))+
+  geom_histogram(bins = 10, color="black", fill="#888888")+
+  labs(x="Tempo", y = "Count")+
+  scale_y_continuous(breaks=seq(0,250,50))+
+  annotate("text", x=180, y=275, label= "mean = 119.87",
+                  size = 3)+
+  theme(plot.title = element_text(hjust = 0.5), axis.title = element_text(size = 9))
+#tempo.hist
+
+# Display only 6 EDA chosen variables, other 3 variables are in Appendix
+# Histograms arranged in 2x3 grid
+grid.arrange(dance.hist, energy.hist, loud.hist, acous.hist, val.hist, tempo.hist, ncol = 3, bottom=textGrob("Figure 4.2: Histograms of Predictor Variables", gp = gpar(fontsize = 9)))
+```
+
+In Figure 4.2, we can see the distributions of six of our predictor variables. We chose to display these initially, as we believe they may have the most significant effect on our response variable of popularity. It is important to note that we will begin our testing with more predictor variables than shown.
+
+Each histogram plot displays the distribution and mean of each predictor variable: danceability, energy, loudness, acousticness, valence, and tempo.
+
+```{r}
+# Bar plot of decade variable, count of songs by decade
+# get counts
+#table(edy['decade'])
+# 1950s 1960s 1970s 1980s 1990s 2000s 2010s 2020s 
+#    2     8    43    67    83   331   392    50 
+decade.totals <- data.frame(Decade=c("1950s","1960s","1970s","1980s",
+                                     "1990s","2000s","2010s","2020s"),
+                     Count=c(2,8,43,67,83,331,392,50))
+ggplot(decade.totals, aes(x=Decade, y=Count, fill=Decade)) + 
+       geom_bar(stat="identity")+
+       labs(title="Count of Songs by Decade", x="Decade", y = "Count", 
+       caption = "Figure 4.3: Barplot of Songs by Decade")+
+       scale_fill_manual(values=c("#888888", "#DDCC77", "#AA4499", "#332288", 
+                                  "#CC6677", "#88CCEE", "#44AA99", "#117733"))+
+       theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))+
+       geom_text(aes(label = Count), vjust = -0.2)
+```
+
+In Figure 4.3, we can see a count of songs within the playlist by decade released. As we go through our testing, it is important to note that the playlist may not be fully representative of every song on Spotify. Our playlist, for example, has a majority of songs from this millennium. In the barplot, it is clear that the 2000s and 2010s decades were the most represented in the playlist, while the 1950s and 1960s were the least represented. As new music is released, a users' overall songs and playlist may reflect this change, with newer music making up a higher proportion.
+
+### Testing
+
+```{r, message=FALSE, warning=FALSE}
+# Load packages
+library(tidyverse)
+library(caret)
+
+# Read in the data
+songs <- read_csv('./edyPlaylist.csv')
+
+# Select only the features which we wish to include
+song_vars <- songs %>% 
+  select(-c(...1, track.name, track.album.release_date, track.album.album_type, Playlist))
+
+# Train test split
+set.seed(0716)
+# Do train test split (point i)
+training.samples <- song_vars$track.popularity %>%
+  createDataPartition(p = 0.8) # Do split
+train.data  <- song_vars[training.samples$Resample1, ] # Train data
+test.data <- song_vars[-training.samples$Resample1, ] # Test data
+#print(paste0("Training observations: ", dim(train.data)[1], " Test observations: ", dim(test.data)[1])) # Check dimensions
+```
+
+Before examining the full model, the data must be examined for the issue of multicollinearity.
+
+```{r}
+fit1 <- lm(track.popularity~(danceability + energy + loudness + speechiness + acousticness + instrumentalness + liveness + tempo + track.duration_ms + valence), data=train.data)
+summary(fit1)
+```
+
+```{r}
+car::vif(fit1)
+```
+
+In our initial regression model, the energy variable had a variance inflation factor (VIF) of 6.36, which is considered above the cutoff for multicollinearity. As a result, we will dropped the energy variable from our regression.
+
+```{r}
+fit2 <- lm(track.popularity~(danceability + loudness + speechiness + acousticness + instrumentalness + liveness + tempo + track.duration_ms + valence), data=train.data)
+summary(fit2)
+```
+
+In our adjusted model, we found that the variables loudness, acousticness, and tempo were the significant predictors of popularity. The next step was to check run an interaction model. An interaction model includes the effects of variables on each other and their combined effect on the response variable.
+
+```{r}
+fit3 <- lm(track.popularity~(danceability + loudness + speechiness + acousticness + instrumentalness + liveness + tempo + track.duration_ms + valence)^2, data=train.data)
+summary(fit3)
+```
+
+In our interaction model, the only significant single variable at the 95% confidence level was track duration. There were a few significant interaction terms, such as the interaction track duration:danceability, loudness:acousticness, acousticness:liveness, and instrumentalness:valence. For the final model, all terms that were not present in a significant interaction and the interaction terms that were not significant themselves were dropped from the model. Due to the hierarchical principle in regression, any variables that are significant in an interaction must also be kept as a single variable term.
+
+```{r}
+fit4 <- lm(track.popularity~(track.duration_ms + danceability + loudness + acousticness + valence + instrumentalness + track.duration_ms*danceability + loudness*acousticness + acousticness*liveness + instrumentalness*valence), data=train.data)
+summary(fit4)
+```
+
+After dropping the non-significant variables from the interaction model, only valence and the interactions duration:danceability and valence:instrumentalness were still significant.
+
+After model creation, the next step was to assess our model performance on the parameters of $R^2$ $RSE$, and $F$.
+
+```{r}
+# Code adapted from Dr. Purna Gamage, Georgetown University
+# Make predictions
+predictions1 <- fit1 %>% predict(test.data)
+p1=data.frame(
+  RMSE = RMSE(predictions1, test.data$track.popularity),
+  R2 = R2(predictions1, test.data$track.popularity)
+)
+# Make predictions
+predictions2 <- fit2 %>% predict(test.data)
+p2=data.frame(
+  RMSE = RMSE(predictions2, test.data$track.popularity),
+  R2 = R2(predictions2, test.data$track.popularity)
+)
+# Make predictions
+predictions3 <- fit3 %>% predict(test.data)
+p3=data.frame(
+  RMSE = RMSE(predictions3, test.data$track.popularity),
+  R2 = R2(predictions3, test.data$track.popularity)
+)
+predictions4 <- fit4 %>% predict(test.data)
+p4=data.frame(
+  RMSE = RMSE(predictions4, test.data$track.popularity),
+  R2 = R2(predictions4, test.data$track.popularity)
+)
+
+# Join the rows 
+all =rbind(p1,p2,p3,p4)
+# Get all F-statistics
+all=cbind(all, c(summary(fit1)$fstatistic[1],summary(fit2)$fstatistic[1],summary(fit3)$fstatistic[1],summary(fit4)$fstatistic[1]))
+# Get all r-sqared statistics
+all=cbind(all,c(summary(fit1)$adj.r.squared,summary(fit2)$adj.r.squared,summary(fit3)$adj.r.squared,summary(fit4)$adj.r.squared))
+# Get all sigma values
+all=cbind(all,c(summary(fit1)$sigma,summary(fit2)$sigma,summary(fit3)$sigma,summary(fit4)$sigma))
+all = cbind(all, c('fit1','fit2','fit3','fit4'))
+colnames(all)[c(3,4,5,6)]<-c("F stat","Adj R^2", "RSE","models")
+all[,c(3,4,5,6)]
+```
+
+Given the performance measures, it is difficult to determine which model is the best. The F statistic, which tells us how significant our model is, is strongest for the second model, which is the one without interactions. However, the second model also has the lowest $R^2$ value, which quantifies how well the response variable is predicted. The $RSE$ or Residual Standard Error is lowest on model 3, which also has the lowest F statistic. The $RSE$ is a measure of the residuals, or the distance from the predicted value. A lower $RSE$ indicates a closer fit. To complete the rest of the analysis, and to determine whether a linear model is suitable for this data at all, we will use model 4, which has a balance of all performance measures. Model 4 was our trimmed model that still included interactions.
+
+```{r}
+par(mfrow=c(2,2))
+plot(fit4)
+```
+
+We used residual plots to determine whether this data science question was suitable for a linear model. The relationship between the fitted values and the residuals does show a V-pattern and does not look randomly distributed. The Q-Q plot of the residuals also suggests that the residuals are not very normally distributed. However, there are no high leverage points - defined in this case as being around or outside of Cook's distance - indicating that it is not the case that just a few outliers are heavily impacting the data. These observations, combined with the relatively low $R^2$ value, would suggest that this question is not very well suited for a linear regression.
+
+### Results
+
+Unfortunately, our data were not very well suited for a linear regression, nor was our model particularly interpretable. In our final chosen model, the main significant predictors were valence, the interaction between loudness and acousticness, and the interaction between valence and instrumentalness. Based on the coefficients and p-values, one might suggest that happier songs, with a combined effect of increased loudness and acousticness, and a decreased combined effect of valence and instrumentalness contribute to a song's popularity. After all, happy, loud and acoustic driven songs are descriptive of pop music. However, given the weak fit and predictive value overall, we are hesitant to conclude that this is the case. An abbreviated regression equation is depicted below:
+
+$$
+Popularity = 7.09X_{valence} + 1.71X_{loudness}X_{acousticness} - 3.52X_{valence}X_{instrumentalness} + 50.98
+$$
+
+Overall, this question is not well-suited to regression and further analysis is needed to determine more conclusively what variables contribute in predicting a song's popularity.
+
+# Conclusion
+
+## Overview
+
+With the recent release of Spotify Wrapped 2022 and Apple Music Replay 2022, we wanted to explore the differences in music tastes across cultures and generations. Specifically, we wanted to look at Mexico, US, and the UK (and decades) to compare different song characteristics. We expected Mexico and the UK to have happier and more danceable songs than the US; we also expected music to become less acoustic and sadder as decades went by. Our interest in comparing the US vs. UK/MX came from exploring if language could play a role in musical expression. For the decades study, we were intrigued by the changes in music throughout the years.
+
+## Results
+
+In question 1, the t-test revealed that there was no clear difference between danceability of the US and the UK, but there was a significant difference in the energy and valence; the UK had higher scores in both. This gave us enough evidence to believe that music preferences in the UK tend to gravitate towards happier songs.
+
+In question 2, the ANOVA and pairwise t-tests results showed that the variable of loudness has steadily increased decade over decade. We can attribute this to the evolution of music; using the Rock genre as an example -- music went from acoustic rock (Beatles) to stadium rock (AC/DC), to metal (Metallica). However, loudness hit a peak in the early 2000's and it has slowly been on a decline since then.
+
+In question 3, the MANOVA test determined that both danceability and valence scores in Mexico's Top 50 songs playlist were meaningfully higher than those of the US. We had initially hypothesized this to be the case, given that Mexico is considered a warmer and expressive country.
+
+In question 4, we thought it might be possible to predict a song's popularity based on specific variable scores. Unfortunately, we came to the realization that there is no tangibility to this problem. Factors affecting song popularity likely are more abstract and difficult to pin down by scoring songs based on their tempo, key, etc.
+
+## Possible improvements
+
+\- The most common improvement to any data science project is more data. Since we were using Top 50 playlists or playlists with less than 1000 songs, we might've not captured the full distributions of scores among songs.
+
+\- We could have done our analysis with more variables and not just the continuous ones. Using variables such as Explicit, album type, and others.
+
+\- Maybe other streaming services have more variables that we could've used to explore the differences between our entities.
+
+## Future analysis
+
+\- We would've liked to study the variable scores and how they were affected by the climate and temperature of different countries. Perhaps colder countries listen to sadder music, while warmer countries have more upbeat songs, or vice versa.
+
+\- We would also be interested in exploring music differences between countries that have been historically oppressed by their leaders, such as Cuba, Venezuela, North Korea, etc. It might be the case that oppressed countries have a limited range/access to music.
+
+\- We'd be interested in researching if there is a link between certain variables and the song's likelihood of becoming viral. We think that songs that came out many years ago have a higher chance of becoming viral, so there might be something to find there.
+
+## Use cases
+
+This type of research can be of great value to marketing teams. If you can single out countries or age group's preferences, you can increase the value of marketing campaigns. Furthermore, artists themselves can use the data to create music that's catered to their intended audience. Lastly, you can utilize the analyses to understand your personal interests. Your music might have scores different to what you expect!
+
+# Appendix
+
+## Extra code
+
+**Question 1 data grab**
+
+```{r, message=FALSE, warning=FALSE}
+# Authentication
+my_token <- get_spotify_access_token(client_id = "7f5181f6d83340b086c27884d5a34fd2", client_secret = "b83b3b712aeb4b31a9dc751f70240540")
+
+## Top 50 - USA
+# https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp
+usa <- get_playlist_audio_features(username = 'spotify', playlist_uris = '37i9dQZEVXbLRQDuF5jeBp', authorization = my_token)
+
+## Top 50 - UK
+# https://open.spotify.com/playlist/37i9dQZEVXbLnolsZ8PSNw
+uk <- get_playlist_audio_features(username = 'spotify', playlist_uris ='37i9dQZEVXbLnolsZ8PSNw', authorization = my_token)
+
+# Filter for only useful columns
+filtered_usa <- usa %>% dplyr::select(track.name, track.album.release_date, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+filtered_uk <- uk %>% dplyr::select(track.name, track.album.release_date, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+
+# Write dataframes to csv files. commented the part that saves the data to local
+#write.csv(filtered_usa,"/Users/brianwimmer/Desktop/Georgetown/ANLY 511/Final Project/filtered_usa_top50.csv", row.names = TRUE)
+#write.csv(filtered_uk,"/Users/brianwimmer/Desktop/Georgetown/ANLY 511/Final Project/filtered_uk_top50.csv", row.names = TRUE)
+```
+
+**Question 2 data grab**
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+
+# Authenticate
+my_token <- get_spotify_access_token(client_id = "7f5181f6d83340b086c27884d5a34fd2", client_secret = "b83b3b712aeb4b31a9dc751f70240540")
+
+# Get a list of songs for each decade
+
+# 1950s
+music50s <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DWSV3Tk4GO2fq", authorization = my_token) %>% mutate(tag = "1950s")
+
+# 1960s
+music60s <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DXaKIA8E7WcJj", authorization = my_token) %>% mutate(tag = "1960s")
+
+# Music from 1970s - special focus
+music70s.1 <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DWTJ7xPn4vNaz", authorization = my_token) %>% mutate(tag = "1970s")
+music70s.2 <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1EQpVaHRDcozEz",
+authorization = my_token) %>%mutate(tag = "1970s")
+music70s.3 <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DWWiDhnQ2IIru", authorization = my_token) %>% mutate(tag = "1970s")
+# Get only unique music
+music70s.2 <- music70s.2[!music70s.2$track.id %in% music70s.1$track.id,]
+# Join
+music70s <- bind_rows(music70s.1, music70s.2)
+
+# 1980s
+music80s <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DX4UtSsGT1Sbe", authorization = my_token) %>% mutate(tag = "1980s")
+
+# 1990s
+music90s <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DXbTxeAdrVG2l", authorization = my_token) %>% mutate(tag = "1990s")
+
+# 2000s
+music00s <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DX4o1oenSJRJd", authorization = my_token) %>% mutate(tag = "2000s")
+
+# 2010s
+music10s <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DX5Ejj0EkURtP", authorization = my_token) %>% mutate(tag = "2010s")
+
+# 2020s - special focus
+music20s.1 <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DX7Jl5KP2eZaS", authorization = my_token) %>% mutate(tag = "2020s")
+music20s.2 <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DX18jTM2l2fJY", authorization = my_token) %>% mutate(tag = "2020s")
+music20s.3 <- get_playlist_audio_features("spotify", playlist_uris = "37i9dQZF1DX0kbJZpiYdZl", authorization = my_token) %>% mutate(tag = "2020s")
+
+# This one is not from spotify but very popular and from filtr
+music20s.4 <- get_playlist_audio_features("spotify", playlist_uris = "49oW3sCI91kB2YGw7hsbBv", authorization = my_token) %>% mutate(tag = "2020s")
+# Bind all rows
+decades <- bind_rows(music50s, music60s, music70s.1, music70s.2, music70s.3,  music80s, music90s, music00s, music10s, music20s.1, music20s.2, music20s.3, music20s.4)
+
+# Filter Variables
+decades.filtered <- decades %>% select(track.id, track.name, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo, track.album.release_date, tag)
+
+# Check for duplicates
+decades.filtered <- decades.filtered[!duplicated(decades.filtered),]
+# comment out to remove otuput
+# table(decades.filtered$tag)
+
+# comment out the grab file save
+# write_csv(decades.filtered, "spotify_decades.csv")
+```
+
+**Question 3 data grab**
+
+```{r}
+# authenticate user
+my_token <- get_spotify_access_token(client_id='71995685ca2446b2b6e2e41d3e0e5b7a', client_secret='c36f1c3a69a241d4a8d45240c42873b0')
+
+# grab the playlist of Top 50 Mexico
+mex <- get_playlist_audio_features(
+  username = 'spotify',
+  playlist_uris = '37i9dQZEVXbO3qyFxbkOE1',
+  authorization = my_token)
+
+# select the columns we want
+filteredMex <- mex %>% select(track.name, track.album.release_date, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+
+# add playlist column
+filteredMex$Playlist <- 'Mex50'
+
+# export to csv, commenting out because we don't need to do this again
+# write.csv(filteredMex, './MexTop50.csv')
+
+# grab the playlist of Top 50 USA
+us <- get_playlist_audio_features(
+  username = 'spotify',
+  playlist_uris = '37i9dQZEVXbLRQDuF5jeBp',
+  authorization = my_token)
+
+# select the columns we want
+filteredUs <- us %>% select(track.name, track.album.release_date, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+
+# add playlist column
+filteredUs$Playlist <- 'US50'
+
+# export to csv, commenting out because we don't need to do this again
+# write.csv(filteredUs, './USTop50.csv')
+```
+
+**Question 3 bootstrap**
+
+```{r, message=FALSE, warning=FALSE}
+# separate the two variables for each label
+mex.v <- mex$valence
+us.v <- us$valence
+mex.d <- mex$danceability
+us.d <-us$danceability
+
+# bootstrap the means
+n <- 10000
+n2 <- 50
+mex.v.boot <- replicate(n, mean(sample(mex.v, n2, replace=TRUE)))
+us.v.boot <- replicate(n, mean(sample(us.v, n2, replace=TRUE)))
+mex.d.boot <- replicate(n, mean(sample(mex.d, n2, replace=TRUE)))
+us.d.boot <- replicate(n, mean(sample(us.d, n2, replace=TRUE)))
+
+# create a valence dataframe with the boots as columns
+df <- data.frame(matrix(ncol = 2, nrow = n*2))
+names <- c("Mean", "Boot")
+colnames(df) <- names
+mexValName <- rep('MexValence', n)
+usValName <- rep('USValence', n)
+all <- c(mexValName, usValName)
+df$Boot <- all
+df$Mean <- c(mex.v.boot, us.v.boot)
+
+# create a dance dataframe with the boots as columns
+df2 <- data.frame(matrix(ncol = 2, nrow = n*2))
+names <- c("Mean", "Boot")
+colnames(df2) <- names
+mexDanName <- rep('MexDance', n)
+usDanName <- rep('USDance', n)
+all <- c(mexDanName, usDanName)
+df2$Boot <- all
+df2$Mean <- c(mex.d.boot, us.d.boot)
+```
+
+**Question 4 data grab**
+
+```{r}
+# authenticate
+my_token <- get_spotify_access_token(client_id='71995685ca2446b2b6e2e41d3e0e5b7a', client_secret='c36f1c3a69a241d4a8d45240c42873b0')
+
+# Edy playlist
+E <- get_playlist_audio_features(
+  username = 'spotify',
+  playlist_uris = '3c9I1enzDFSTCEoI5y4Igv?si=f7171c2fd9eb43f1',
+  authorization = my_token)
+
+# select the columns we want
+filteredE <- E %>% select(track.name, track.popularity, track.album.album_type, track.duration_ms, danceability, energy,
+                          loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+
+# add playlist column
+filteredE$Playlist <- 'Edy'
+
+# export to csv. comment out the wirting of file
+# write.csv(filteredE, 'Desktop/SCHOOLS/GEORGETOWN/511 PROB/Final Project/edyPlaylist.csv')
+```
+
+## Extra graphs
+
+**Histograms for sample means of question 3**
+
+```{r, warning=FALSE, message=FALSE}
+# histogram of the boots for valence
+ggplot(df, aes(x=Mean, fill=Boot)) +
+  geom_histogram() +
+  theme(plot.title = element_text(hjust = 0.5, size=16), axis.text=element_text(size=10), axis.title=element_text(size=14), plot.caption = element_text(hjust = 0.5)) +
+  ggtitle('Distribution of sample means for Valence') +
+  ylab('Count') +
+  xlab('Sample mean') +
+  scale_fill_manual(name='Playlist', values=c("#78866b", "#cd5c5c")) +
+  labs(caption = 'Figure 3.3: Histogram of Sample Means for Valence')
+
+# histogram of the boots for danceability
+ggplot(df2, aes(x=Mean, fill=Boot)) +
+  geom_histogram() +
+  theme(plot.title = element_text(hjust = 0.5, size=16), axis.text=element_text(size=10), axis.title=element_text(size=14), plot.caption = element_text(hjust = 0.5)) +
+  ggtitle('Distribution of sample means for Danceability') +
+  ylab('Count') +
+  xlab('Sample mean') +
+  scale_fill_manual(name = "Playlist", values=c("#78866b", "#cd5c5c")) +
+  labs(caption = 'Figure 3.4: Histogram of Sample Means for Danceability')
+```
+
+**Histograms for non-audio features question 4**
+
+```{r}
+# color pallete (3rd down with 12 colors): https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+# track.album.release_date
+date.hist <- ggplot(edy, aes(x=track.album.release_date))+
+  geom_histogram(binwidth = 2, color="black", fill="#332288")+
+  labs(title="Distribution of Release Date",x="Year", y = "Count")+
+  scale_x_continuous(breaks=c(1950,1960,1970,1980,1990,2000,2010,2020))+
+  scale_y_continuous(breaks=seq(0,150,25))+
+  annotate("text", x=1958, y=125, label= "mean = 2005")+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+date.hist
+# track.duration_s
+duration.hist <- ggplot(edy, aes(x=track.duration_s))+
+  geom_histogram(binwidth = 30, color="black", fill="#882255")+
+  labs(title="Distribution of Song Duration (seconds)",x="Duration (in seconds)", y = "Count")+
+  scale_x_continuous(breaks=seq(0,900,60))+
+  scale_y_continuous(breaks=seq(0,250,50))+
+  annotate("text", x=90, y=225, label= "mean = 246")+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+duration.hist
+```
+
+**Histograms for audio features question 4**
+
+```{r}
+# color pallete (3rd down with 12 colors): https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+# speechiness
+speech.hist <- ggplot(edy, aes(x=speechiness))+
+  geom_histogram(binwidth = .05, color="black", fill="#ddcc77")+
+  labs(title="Distribution of Speechiness",x="Speechiness", y = "Count")+
+  scale_x_continuous(breaks=c(0.0, 0.1, 0.2, 0.3, 0.4, 0.5))+
+  annotate("text", x=0.5, y=750, label= "mean = 0.07")+
+  theme(plot.title = element_text(hjust = 0.5))
+speech.hist
+# instrumentalness
+instr.hist <- ggplot(edy, aes(x=instrumentalness))+
+  geom_histogram(binwidth = .1, color="black", fill="#6699cc")+
+  labs(title="Distribution of Instrumentalness",x="Instrumentalness", y = "Count")+
+  annotate("text", x=1, y=800, label= "mean = 0.14")+
+  theme(plot.title = element_text(hjust = 0.5))
+instr.hist
+# liveness
+live.hist <- ggplot(edy, aes(x=liveness))+
+  geom_histogram(binwidth = .1, color="black", fill="#117733")+
+  labs(title="Distribution of Liveness",x="Liveness", y = "Count")+
+  scale_y_continuous(breaks=seq(0,500,100))+
+  annotate("text", x=1, y=550, label= "mean = 0.19")+
+  theme(plot.title = element_text(hjust = 0.5))
+live.hist
+```
+
+## Variable descriptions
+
+-   **Danceability:** Danceability describes how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. A value of 0.0 is least danceable and 1.0 is most danceable.
+
+-   **Acousticness:** A measure from 0.0 to 1.0 of whether the track is acoustic.
+
+-   **Energy:** Energy is a measure from 0.0 to 1.0 and represents a perceptual measure of intensity and activity. Typically, energetic tracks feel fast, loud, and noisy.
+
+-   **Instrumentalness:** Predicts whether a track contains no vocals. The closer the instrumentalness value is to 1.0, the greater likelihood the track contains no vocal content.
+
+-   **Liveness:** Detects the presence of an audience in the recording. Higher liveness values represent an increased probability that the track was performed live.
+
+-   **Loudness:** The overall loudness of a track in decibels (dB). Loudness values are averaged across the entire track. Values typical range between -60 and 0 db.
+
+-   **Speechiness:** Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audio book, poetry), the closer to 1.0 the attribute value.
+
+-   **Tempo:** The overall estimated tempo of a track in beats per minute (BPM). In musical terminology, tempo is the speed or pace of a given piece and derives directly from the average beat duration.
+
+-   **Valence:** A measure from 0.0 to 1.0 describing the musical positiveness conveyed by a track. Tracks with high valence sound more positive (e.g. happy, cheerful, euphoric), while tracks with low valence sound more negative (e.g. sad, depressed, angry).
+
+## Sources
+
+We used [this](https://medium.com/@boplantinga/what-do-spotifys-audio-features-tell-us-about-this-year-s-eurovision-song-contest-66ad188e112a) page to understand the Spotify variable score meanings.
+
+We used [this](https://cran.r-project.org/web/packages/spotifyr/spotifyr.pdf) page to understand Spotify's API.
+
+Benjamini, Y., & Hochberg, Y. (2000). On the adaptive control of the false discovery rate in multiple testing with independent statistics. Journal of educational and Behavioral Statistics, 25(1), 60-83.
+
+Jafari, M., & Ansari-Pour, N. (2019). Why, when and how to adjust your P values?. Cell Journal (Yakhteh), 20(4), 604.

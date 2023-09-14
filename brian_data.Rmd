@@ -1,0 +1,54 @@
+---
+title: "511_Project_Data"
+author: "Brian Wimmer"
+date: "2022-11-23"
+output: html_document
+---
+
+# Load Libraries for Spotify Data
+```{r}
+library(Rspotify)
+library(httr)
+library(jsonlite)
+library(spotifyr)
+```
+
+# Authentication
+```{r}
+my_token <- get_spotify_access_token(client_id = "7f5181f6d83340b086c27884d5a34fd2", 
+                                   client_secret = "b83b3b712aeb4b31a9dc751f70240540")
+```
+
+
+# Differences Between Countries
+## Top 50 - USA
+```{r}
+# https://open.spotify.com/playlist/37i9dQZEVXbLRQDuF5jeBp
+usa <- get_playlist_audio_features(
+      username = 'spotify',
+      playlist_uris = '37i9dQZEVXbLRQDuF5jeBp',
+      authorization = my_token)
+```
+
+## Top 50 - UK
+```{r}
+# https://open.spotify.com/playlist/37i9dQZEVXbLnolsZ8PSNw
+uk <- get_playlist_audio_features(
+      username = 'spotify',
+      playlist_uris = '37i9dQZEVXbLnolsZ8PSNw',
+      authorization = my_token)
+```
+
+# Filter for only useful columns
+```{r}
+filtered_usa <- usa %>% dplyr::select(track.name, track.album.release_date, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+
+filtered_uk <- uk %>% dplyr::select(track.name, track.album.release_date, track.popularity, track.album.album_type, track.duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+```
+
+# Write dataframes to csv files
+```{r}
+write.csv(filtered_usa,"/Users/brianwimmer/Desktop/Georgetown/ANLY 511/Final Project/filtered_usa_top50.csv", row.names = TRUE)
+write.csv(filtered_uk,"/Users/brianwimmer/Desktop/Georgetown/ANLY 511/Final Project/filtered_uk_top50.csv", row.names = TRUE)
+```
+

@@ -1,0 +1,345 @@
+---
+title: "Q1_EDA_&_Testing"
+author: "Brian Wimmer"
+date: "2022-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load libraries
+library(ggplot2)
+library(tidyverse)
+library(psych) 
+library(dplyr)
+library(arsenal)
+library(gridExtra)
+library(grid)
+```
+
+```{r}
+# Load data
+
+# Top 50 USA
+usa <- read.csv('/Users/brianwimmer/Desktop/Georgetown/ANLY 511/Final Project/filtered_usa_top50.csv')
+
+# Top 50 UK
+uk <- read.csv('/Users/brianwimmer/Desktop/Georgetown/ANLY 511/Final Project/filtered_uk_top50.csv')
+```
+
+```{r}
+# adding "country" column to each df; will be used for EDA purposes
+usa$country <- "USA"
+uk$country <- "UK"
+```
+
+```{r}
+# combine usa and uk into one df
+both <- rbind(usa, uk)
+```
+
+```{r}
+# create df of both with just three variables (danceability, energy, and valence) of interest and country
+both.interest <- both %>% select(danceability, energy, valence, country)
+```
+
+```{r}
+# summary statistics - USA
+summary(usa[c('danceability', 'energy', 'valence')])
+```
+
+```{r}
+# summary statistics - UK
+summary(uk[c('danceability', 'energy', 'valence')])
+```
+
+Comparison of Danceability - very minimal difference in the mean of danceability. UK is 0.64 and USA is 0.63. Expected UK to be higher as their charts often reflect more dance/edm/pop songs ("club music"). Danceability represents a combination of tempo, rhythm stability, beat strength, and regularity.
+<br />
+Comparison of Energy - somewhat significant difference in the mean of energy. UK is higher at 0.62 and USA is lower at 0.54. Energy represents the intensity and activity of a song, thought this would compare easily to danceability but they are different.
+<br />
+Comparison of Valence - somewhat significant difference in the mean of valence. UK is higher at 0.5 and USA is lower at 0.4. Valence compares the musical positiveness of a song, higher value means more positive.
+
+
+```{r}
+# Boxplot for danceability varible
+both %>%
+  ggplot( aes(x = country, y = danceability, fill=country)) +
+  geom_boxplot() + labs(title = "Danceability of Top 50 Songs by Country",
+              caption = "Figure 1.1: Boxplot of Danceability by Country")+
+    scale_fill_manual(values = c("#6699cc", "#cd5c5c")) +
+  xlab("Country") + ylab("Danceability")+ 
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+```
+<br />
+In Figure 1.1, we can see there is not much difference at all between the countries. The median danceability is slightly higher for the USA than the UK. The interquartile range is also slightly larger for the USA than the UK.
+
+
+```{r}
+# Boxplot for energy variable
+both %>%
+  ggplot( aes(x = country, y = energy, fill=country)) +
+  geom_boxplot() + labs(title = "Energy of Top 50 Songs by Country",
+              caption = "Figure 1.2: Boxplot of Energy by Country")+
+    scale_fill_manual(values = c("#6699cc", "#cd5c5c")) +
+  xlab("Country") + ylab("Energy")+ 
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+```
+<br />
+In Figure 1.2, we can see there is a significant difference between the countries. The median energy is higher for the UK than the USA. The interquartile range is also much larger for the UK than the USA.
+
+```{r}
+# Boxplot for valence variable
+both %>%
+  ggplot( aes(x = country, y = valence, fill=country)) +
+  geom_boxplot() + labs(title = "Valence of Top 50 Songs by Country",
+              caption = "Figure 1.3: Boxplot of Valence by Country")+
+    scale_fill_manual(values = c("#6699cc", "#cd5c5c")) +
+  xlab("Country") + ylab("Valence")+ 
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+```
+<br />
+In Figure 1.3, we can see there is some difference between the countries. The median valence is higher for the UK than the USA. The interquartile range is also higher for the UK than the USA.
+
+```{r}
+# Histogram for danceability variable, side-by-side
+uk.dance.hist <- ggplot(uk, aes(x=danceability))+
+  geom_histogram(binwidth=.1, color="black", fill="#6699cc")+
+  labs(title="UK Distribution of Danceability",x="Danceability", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,20,2))+
+  annotate("text", x=0.3, y=16, label= "mean = 0.64")+ 
+  theme(plot.title = element_text(hjust = 0.5))
+#uk.dance.hist
+
+usa.dance.hist <- ggplot(usa, aes(x=danceability))+
+  geom_histogram(binwidth=.1, color="black", fill="#cd5c5c")+
+  labs(title="USA Distribution of Danceability",x="Danceability", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,20,2))+
+  annotate("text", x=0.3, y=15, label= "mean = 0.63")+ 
+  theme(plot.title = element_text(hjust = 0.5))
+#usa.dance.hist
+
+grid.arrange(uk.dance.hist, usa.dance.hist, ncol = 2, bottom=textGrob("Figure 1.4: Histograms of Danceability by Country", gp = gpar(fontsize = 9)))
+```
+<br />
+In Figure 1.4, we can see there is not much difference between the countries. The mean danceability is slightly higher for the UK (0.64) than the USA (0.63).
+
+```{r}
+# Histogram for danceability variable, overlaid, add to appendix?
+ggplot(both, aes(x = danceability, fill = country)) +
+  geom_histogram(position = "identity", alpha = 0.5, binwidth = .1)+
+    scale_fill_manual(values = c("#6699cc", "#cd5c5c"))+
+  labs(title="Distribution of Danceability by Country",x="Danceability", y = "Count")
+```
+<br />
+
+```{r}
+# Histogram for energy variable, side-by-side
+uk.energy.hist <- ggplot(uk, aes(x=energy))+
+  geom_histogram(binwidth=.1, color="black", fill="#6699cc")+
+  labs(title="UK Distribution of Energy",x="Energy", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,20,2))+
+  annotate("text", x=0.9, y=10, label= "mean = 0.62")+ 
+  theme(plot.title = element_text(hjust = 0.5))
+#uk.energy.hist
+
+usa.energy.hist <- ggplot(usa, aes(x=energy))+
+  geom_histogram(binwidth=.1, color="black", fill="#cd5c5c")+
+  labs(title="USA Distribution of Energy",x="Energy", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,20,2))+
+  annotate("text", x=0.9, y=16, label= "mean = 0.54")+ 
+  theme(plot.title = element_text(hjust = 0.5))
+#usa.energy.hist
+
+grid.arrange(uk.energy.hist, usa.energy.hist, ncol = 2, bottom=textGrob("Figure 1.5: Histograms of Energy by Country", gp = gpar(fontsize = 9)))
+```
+<br />
+In Figure 1.5, we can see there is a difference between the countries. The mean energy is higher for the UK (0.62) than the USA (0.54).
+
+```{r}
+# Histogram for energy variable, overlaid, add to appendix?
+ggplot(both, aes(x = energy, fill = country)) +
+  geom_histogram(position = "identity", alpha = 0.5, binwidth = .1)+
+    scale_fill_manual(values = c("#6699cc", "#cd5c5c"))+
+  labs(title="Distribution of Energy by Country",x="Energy", y = "Count")
+```
+<br />
+
+```{r}
+# Histogram for valence variable, side-by-side
+uk.valence.hist <- ggplot(uk, aes(x=valence))+
+  geom_histogram(binwidth=.1, color="black", fill="#6699cc")+
+  labs(title="UK Distribution of Valence",x="Valence", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,20,2))+
+  annotate("text", x=0.9, y=9, label= "mean = 0.5")+ 
+  theme(plot.title = element_text(hjust = 0.5))
+#uk.valence.hist
+
+usa.valence.hist <- ggplot(usa, aes(x=valence))+
+  geom_histogram(binwidth=.1, color="black", fill="#cd5c5c")+
+  labs(title="USA Distribution of Valence",x="Valence", y = "Count")+
+  scale_x_continuous(breaks=c(0.25,0.50,0.75,1.00))+
+  scale_y_continuous(breaks=seq(0,20,2))+
+  annotate("text", x=0.8, y=11, label= "mean = 0.4")+ 
+  theme(plot.title = element_text(hjust = 0.5))
+#usa.valence.hist
+
+grid.arrange(uk.valence.hist, usa.valence.hist, ncol = 2, bottom=textGrob("Figure 1.6: Histograms of Valence by Country", gp = gpar(fontsize = 9)))
+```
+<br />
+In Figure 1.6, we can see there is a difference between the countries. The mean valence is higher for the UK (0.5) than the USA (0.4).
+
+```{r}
+# Histogram for valence variable, overlaid, add to appendix?
+ggplot(both, aes(x = valence, fill = country)) +
+  geom_histogram(position = "identity", alpha = 0.5, binwidth = .1)+
+    scale_fill_manual(values = c("#6699cc", "#cd5c5c"))+
+  labs(title="Distribution of Valence by Country",x="Valence", y = "Count")
+```
+<br />
+
+```{r}
+set.seed(1999)
+
+# Hypothesis Testing - T-test for danceability
+uk.dance <- subset(both.interest, select=danceability, subset=country=="UK", drop=T)
+usa.dance <- subset(both.interest, select=danceability,subset=country=="USA", drop=T)
+
+t.test(uk.dance, usa.dance, alt="greater")
+```
+Let $\mu_S$ = population mean dancebility of USA and $\mu_K$ = population mean dancebility of UK
+Null - $H_0: \mu_K - \mu_S = 0$ There is no difference in the average danceability between UK and USA.
+Alternative - $H_a: \mu_K - \mu_S > 0$ The average danceability is larger for UK than USA.
+
+Interpretation - Since p-value is greater than 0.05, at 5% significance level, we have enough evidence to conclude that we fail to reject the null hypothesis. Therefore there is not strong evidence that the danceability of music in the top 50 in the UK is higher than music in the top 50 in the USA.
+
+
+
+
+```{r}
+set.seed(1999)
+
+# Hypothesis Testing - T-test for energy
+uk.energy <- subset(both.interest, select=energy, subset=country=="UK", drop=T)
+usa.energy <- subset(both.interest, select=energy,subset=country=="USA", drop=T)
+
+t.test(uk.energy, usa.energy, alt="greater")
+```
+Let $\mu_S$ = population mean energy of USA and $\mu_K$ = population mean energy of UK
+Null - $H_0: \mu_K - \mu_S = 0$ There is no difference in the average energy between UK and USA.
+Alternative - $H_a: \mu_K - \mu_S > 0$ The average energy is larger for UK than USA.
+
+Interpretation - Since p-value is less than 0.05, at 5% significance level, we have enough evidence to conclude that we reject the null hypothesis. Therefore there is strong evidence that the energy of music in the top 50 in the UK is higher than music in the top 50 in the USA.
+
+```{r}
+set.seed(1999)
+
+# bootstrap ratio of means of energy
+N <- 10000
+energy.diff.mean.ratio <- numeric(N) 
+
+for (i in 1:N)
+{
+uk.sample <- sample(uk.energy, 50, replace = TRUE)
+usa.sample <- sample(usa.energy, 50, replace = TRUE) 
+energy.diff.mean.ratio[i] <- mean(uk.sample) / mean(usa.sample)
+}
+
+#hist(energy.diff.mean.ratio,main = "Bootstrap Distribution of Difference in Mean of Energy", col = '#6666cc', xlab = 'Difference in Mean of Energy')
+#abline(v = mean(uk.energy) / mean(usa.energy), col = "black", lty = 2)
+
+
+# 95 percent confidence interval
+quantile(energy.diff.mean.ratio, c(0.025, 0.975))
+```
+<br />
+The 95% bootstrap percentile confidence interval for the ratio of means (UK energy / USA energy) is (1.03, 1.32). Thus, we are 95% confident that the energy of top 50 UK songs are, on average, between 1.03 and 1.32 times greater than top 50 USA songs.
+
+```{r}
+# create copy of energy.diff.mean.ratio into df
+energy.diff.mean.ratio.df <- as.data.frame(energy.diff.mean.ratio)
+
+# Histogram for bootstrap ratio of means of energy
+boot.energy.hist <- ggplot(energy.diff.mean.ratio.df, aes(x=energy.diff.mean.ratio))+
+  geom_histogram(binwidth=0.05, color="black", fill="#6666cc")+
+  labs(title="Bootstrap Distribution of Difference in Mean of Energy", x = "Difference in Mean of Energy", y = "Frequency", caption = "Figure 1.7: Histogram of Bootstrap Difference in Mean of Energy")+
+  annotate("text", x=.95, y=2500, label= "mean ratio = 1.165")+
+  scale_x_continuous(breaks=c(0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5))+
+  scale_y_continuous(breaks=seq(0,2500,500))+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))+                     
+  geom_vline(xintercept = mean(mean(uk.energy) / mean(usa.energy)), col = "black", linetype="dashed")
+
+boot.energy.hist
+```
+<br />
+In Figure 1.7, we can see the distribution of the difference in mean energy between the UK and the USA. The difference in the ratio of mean of energy is 1.165. On average, UK top 50 songs are 1.165 times greater than that of the USA top 50 songs.
+
+
+```{r}
+set.seed(1999)
+
+# Hypothesis Testing - T-test for valence
+uk.valence <- subset(both.interest, select=valence, subset=country=="UK", drop=T)
+usa.valence <- subset(both.interest, select=valence,subset=country=="USA", drop=T)
+
+t.test(uk.valence, usa.valence, alt="greater")
+```
+Let $\mu_S$ = population mean valence of USA and $\mu_K$ = population mean valence of UK
+Null - $H_0: \mu_K - \mu_S = 0$ There is no difference in the average valence between UK and USA.
+Alternative - $H_a: \mu_K - \mu_S > 0$ The average valence is larger for UK than USA.
+
+Interpretation - Since p-value is less than 0.05, at 5% significance level, we have enough evidence to conclude that we reject the null hypothesis. Therefore there is strong evidence that the valence of music in the top 50 in the UK is higher than music in the top 50 in the USA.
+
+```{r}
+set.seed(1999)
+
+# bootstrap ratio of means of valence
+N <- 10000
+valence.diff.mean.ratio <- numeric(N) 
+
+for (i in 1:N)
+{
+uk.sample <- sample(uk.valence, 50, replace = TRUE)
+usa.sample <- sample(usa.valence, 50, replace = TRUE) 
+valence.diff.mean.ratio[i] <- mean(uk.sample) / mean(usa.sample)
+}
+
+#hist(valence.diff.mean.ratio,main = "Bootstrap Distribution of Difference in Mean of Valence", col = '#6666cc', xlab = 'Difference in Mean of Valence')
+#abline(v = mean(uk.valence) / mean(usa.valence), col = "black", lty = 2)
+
+
+# 95 percent confidence interval
+quantile(valence.diff.mean.ratio, c(0.025, 0.975))
+```
+<br />
+The 95% bootstrap percentile confidence interval for the ratio of means (UK valence / USA valence) is (1, 1.59). Thus, we are 95% confident that the valence of top 50 UK songs are, on average, between 1 and 1.59 times greater than top 50 USA songs.
+
+```{r}
+# create copy of valence.diff.mean.ratio into df
+valence.diff.mean.ratio.df <- as.data.frame(valence.diff.mean.ratio)
+
+# Histogram for bootstrap ratio of means of energy
+boot.valence.hist <- ggplot(valence.diff.mean.ratio.df, aes(x=valence.diff.mean.ratio))+
+  geom_histogram(binwidth=0.09, color="black", fill="#6666cc")+
+  labs(title="Bootstrap Distribution of Difference in Mean of Valence", x = "Difference in Mean of Valence", y = "Frequency", caption = "Figure 1.8: Histogram of Bootstrap Difference in Mean of Valence")+
+  annotate("text", x=.95, y=2500, label= "mean ratio = 1.26")+
+  scale_x_continuous(breaks=c(0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0))+
+  scale_y_continuous(breaks=seq(0,2500,500))+
+  theme(plot.title = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))+                     
+  geom_vline(xintercept = mean(mean(uk.valence) / mean(usa.valence)), col = "black", linetype="dashed")
+
+boot.valence.hist
+```
+<br />
+In Figure 1.8, we can see the distribution of the difference in mean valence between the UK and the USA. The difference in the ratio of mean of valence is 1.26. On average, UK top 50 songs are 1.26 times greater than that of the USA top 50 songs.
+
+
+
+

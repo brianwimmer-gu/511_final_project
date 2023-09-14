@@ -1,0 +1,138 @@
+---
+title: "Question 2"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Has music gotten louder over time? 
+
+## Introduction
+Music can be considered a defining characteristic of a generation.  The most popular songs of a decade often reflect the general culture, philosophy, and sentiment of that time.  For this reason, our second question set out to examine how popular music has changed over time on a decade-by-decade basis.  Specifically, we set out to see what variables have most drastically changed over time, and whether identifying these changes might be informative with respect to trends in culture popular culture.  After some exploratory analysis, hypothesis testing was conducted on mean differences in track loudness over the decades using pairwise t-tests and ANOVA.
+
+## Methodology 
+### Data Gathering
+The first step in the process was to gather appropriate data to explore.  Spotify maintains a playlist for each decade from 1950 to 2010 entitled "All out" followed by the decade.  These playlists reflect the most popular songs from that decade in the United States.  While Spotify is not transparent about their sampling method for the playlist, it is assumed that these playlists are based on the top charts from each decade.  The current decade was also included for continuity, and in this case the spotify "top tracks" playlists were used for each year of the decade thus far (2020, 2021, 2022).  All data were gathered from the Spotify API, using the SpotifyR package. 
+
+### Data cleaning
+The dataset was checked for missing values and duplicate song names.  No missing values were detected and any duplicate songs were removed.  Only non-categorical (continuous) track features were considered in the analysis since the planned hypothesis tests were only suitable for numerical data.  Track identifiers were omitted.  Popularity was dropped as a variable since all songs in the analysis were retrieved from top charts.  After these steps were applied, the final dataset contained 9 features, one categorical decade label, and 1,329 songs (10 x 1329 matrix). 
+
+### Exploratory data analysis (EDA)
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(viridis)
+
+# Read in data 
+decades <- read_csv("spotify_decades.csv") %>% rename(decade = tag)
+
+# Pivot for suitable graphing with facets 
+songs_long <- decades %>% pivot_longer(cols = colnames(decades)[5:14], names_to = "Measure", 
+                                values_to = "Score") %>% mutate(decade = as.factor(decade))
+
+# Discard instrumentalness (little variance)
+songs_long <- songs_long[songs_long$Measure!="instrumentalness",]
+
+# Graph overall trends
+mean_data <- songs_long %>% group_by(decade, Measure) %>%
+  summarise(across(.cols = Score, .fns = mean))
+
+# Rename track duration 
+mean_data[mean_data$Measure=="track.duration_ms",]$Measure <- "track.duration"
+
+# Graph trend
+mean_data %>%
+  ggplot(aes(x = decade, y = Score)) + facet_wrap(~Measure, scales = "free", nrow = 3) +
+  geom_line(aes(group = 1, color = Measure)) + geom_point(alpha = .9, color = "black") + 
+  labs(title = "Mean of Song Variables by Decade,\n1950-2020") + 
+  theme(text = element_text(size = 14), axis.text.x = element_text( 
+                           size=9.5, angle=45))
+
+# Distribution of loudness for each decade
+decades %>% mutate(decade = as.factor(decade)) %>% 
+  ggplot(aes(x = loudness)) + facet_wrap(~decade) + geom_histogram(aes(fill = decade), color = "black") +
+  labs(title = "Distribution of Loudness Scores for Each Decade\n1950-2020", x = "Loudness (dB)", 
+       y = "Number of Songs") + theme(text = element_text(size = 14), axis.text.x = element_text( 
+                           size=10, angle=45))
+
+# Violin plot of loudness for each decade
+decades %>% mutate(decade = as.factor(decade)) %>% ggplot(aes(decade, loudness)) +
+  geom_violin(aes(group = decade, fill = decade)) +
+  geom_boxplot(aes(group = decade, fill = decade), outlier.colour = "red",
+               outlier.shape = 2, width=0.1) + labs(title = "Violin Plot of Loudness for Popular Songs of Each Decade\n1950-2020",
+                                         x = "Decade", y = "Loudness Score (dB)") +
+  scale_fill_viridis(discrete = T, option = "magma") + theme(text = element_text(size = 14))
+
+```
+Distributions and mean for each variable were visualized in a ggplot facet grid.  Based on the EDA, one of the clearest trends identified in the plot above is in the loudness variable.  For this reason, loudness was selected as the first variable to be analyzed.  The distribution of each decade's loudness score (in decibels) was also plotted to determine its suitability for parametric hypothesis tests.  Each decade's loudness distribution appeared approximately gaussian, and we proceeded with the parametric hypothesis tests since they are robust to moderate deviations from normality.
+
+### Analysis of Variance
+After EDA, we conducted an analysis of variance (ANOVA) test on the loudness scores of each decade.  An ANOVA is a univariate test to determine whether a variable is different under the conditions of a categorical variable. This test will help us determine whether, in general, there is a difference in mean loudness among the decade groups, however it will not inform us specifically as to the directionality of the difference or which decades differ specifically.  The null and alternative hypothesis are as follows: 
+  
+$H_0: \mu_{1950} = \mu_{1960} = \mu_{1970} = \mu_{1980} = \mu_{1990} = \mu_{2000} = \mu_{2010} =  \mu_{2020}$, there is no difference in mean loudness scores among the decades.
+  
+$H_a:$ The mean loudness scores are not equal. 
+
+```{r}
+# Anova for loudness
+summary(aov(loudness ~ decade, data = decades))
+```
+  
+The results of our ANOVA test revealed F(1327) = 436.4, p < 0.001.  Based on the results of our ANOVA test, we determined that not all mean loudness values are the same for every decade. 
+
+### Pairwise t-tests
+#### A note on multiple comparisons
+The next step in our analysis was to determine which decades had mean loudness scores that significantly differed from each other.  To this effect, we decided to conduct pairwise t-tests on the loudness scores between each decade to determine which decades are different from one another.  Since there are 8 decades available to us, the number of pairwise t-tests required was:
+  
+$C(8,2) = \frac{8!}{2!(8-2)!} = 28$
+  
+Since this is a large number of t-tests, we must adjust for multiple comparisons.  The Benjamini and Hochberg adjustment method was used to adjust the p-value by controlling the False Discovery Rate (FDR), which is the expected proportion of false positives (Jafari & Ansari-Pour, 2018; Benjamini & Hochberg, 2000).  This is a slightly less conservative method than the Bonferroni method, which simply multiplies the raw p-values by the number of tests. The null and alternative hypothesis of each pairwise t-test is as follows: 
+  
+$H_0: \mu_x = \mu_y$  There is no difference in mean loudness scores for some decade X and decade Y - the difference in means is zero.  In other words, both decade X and decade Y have similar loudness scores for their tracks on average.
+  
+$H_a: \mu_x \neq \mu_y$  The difference in mean loudness scores for some decade X and decade Y are not zero.  In other words, decade X and decade Y have different loudness levels on their most popular tracks on average.
+
+#### Results/Conclusion
+```{r}
+library(ggpubr)
+library(rstatix)
+library(viridis)
+# Pairwise t-tests for loudness - Hochberg correction
+loud.test <- pairwise_t_test(decades, loudness ~ decade, paired = F,
+                p.adjust.method = "hochberg")
+
+# Pairwise t-test matrix
+loud.test2 <- pairwise.t.test(decades$loudness, decades$decade,
+                             p.adjust.method = "hochberg")
+
+# Heat map of p-values
+# Heatmap with t-test results
+loud.data <- reshape2::melt(loud.test2$p.value) %>% mutate(value = round(value, 3))
+loud.data <- na.omit(loud.data)
+loud.data2 <- data.frame(Var1 = loud.data$Var2, Var2 = loud.data$Var1, value = loud.data$value)
+loud.matrix <- bind_rows(loud.data, loud.data2)
+
+loud.matrix %>% ggplot(aes(Var1, Var2, fill = value)) + geom_tile(color = "white",
+            lwd = 1.5,
+            linetype = 1) +
+  geom_text(aes(label = value)) +
+  scale_x_continuous(breaks = seq(1950, 2020, 10)) + 
+  scale_y_continuous(breaks = seq(1950, 2020, 10)) + labs(title = "Matrix of P-values for Pairwise t-tests\nfor Loudness Scores",
+                                                          x = "Decade", y = "Decade",
+                                                          caption = "\nNote: A value of 0 indicates P < .001",
+                                                          ) +
+  scale_fill_gradient("P-value", low = "red", high = "lightblue") + theme(text = element_text(size = 16))
+```
+
+The results of our pairwise t-tests suggest that for many decades, there is a significant difference in loudness of popular songs.  Specifically, from the years 1970-2000, there is a significant increase in loudness score for the most popular tracks.  There is not as much of significant difference in loudness on the lower and upper range, however.  For example, there is no significant difference in loudness from 1950 to 1960, 1960 to 1970, and 2010 to 2020.  Notably, between 2000 and 2020, there is a significant difference in loudness for popular songs in the other direction - the loudness has decreased on average.  Overall, this suggests a trend in popular music where songs have generally increased in volume on average from the period 1950-2000, and have begun to decrease in the period 2000-2020.
+  
+In conclusion, the loudness in decibels of popular music has changed significantly over the decades on average.  We have seen a general increase in loudness for over 6 decades, until a recent decrease in loudness over the past 20 years.  While the reasons for this trend may be difficult to determine, there are a few plausible hypotheses.  Genre may have a large impact - but it is worth considering that the popularity of genres is not necessarily directly reflected in top charts.  Rock, disco, and rap became in the last decades of the 1900s, then genres like punk rock, R&B, and alternative were popular in the 00's.  It is suprising that in the 2010s and 2020s, a time where loud electronic music has become more popular, that we are starting to see a decrease in loudness.  However, considering that top charts contain more pop music, and currently the most popular songs are from artists such as Taylor Swift, The Weeknd, Post Malone, and Lil Uzi Vert, it makes some intuitive sense that popular music has become quieter.  
+
+
+
+## Sources
+Benjamini, Y., & Hochberg, Y. (2000). On the adaptive control of the false discovery rate in multiple testing with independent statistics. Journal of educational and Behavioral Statistics, 25(1), 60-83.
+  
+  
+Jafari, M., & Ansari-Pour, N. (2019). Why, when and how to adjust your P values?. Cell Journal (Yakhteh), 20(4), 604.
+
+
